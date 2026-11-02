@@ -19,7 +19,7 @@ REPO = "hendrikusprinsloo-ux/mp-assistance"        # "owner/name" of the public 
 API = "https://api.github.com/repos/{}/releases/latest"
 USER_AGENT = "MP-Assistance-updater"
 MAX_ZIP = 50 * 1024 * 1024
-KEEP = {".venv", ".browser-profile", ".claude", ".update_backup", "qa_from_dashboard", "settings.json", "issues_ledger.csv",
+KEEP = {".git", ".gitignore", ".venv", ".browser-profile", ".claude", ".update_backup", "qa_from_dashboard", "settings.json", "issues_ledger.csv",
         "server.log", "package.sh", ".update_done.json", "tests", "test", "__pycache__"}   # never replaced by an update
 
 
@@ -99,21 +99,27 @@ def apply_zip(data, here, version, notes="", sha256=None):
         raise ValueError("The download does not match its checksum, so it was not installed")
     here = Path(here)
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        members = [(i, rel) for i, rel in safe_members(zf) if rel.parts[0] not in KEEP and rel.name != ".DS_Store"]
+        members = [(i, rel) for i, rel in safe_members(zf) if rel.parts[0] not in KEEP and ".git" not in rel.parts and rel.name != ".DS_Store"]
         if not any(rel.name == "server.py" for _, rel in members):
             raise ValueError("The update zip does not look like this app")
         backup = here / ".update_backup" / time.strftime("%Y%m%d-%H%M%S")
-        changed = []
+        changed, failed = [], []
         for info, rel in members:
             target = here / rel
-            if target.is_file():
-                (backup / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(target, backup / rel)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(zf.read(info))
-            if info.external_attr >> 16 & 0o111:
-                target.chmod(target.stat().st_mode | 0o111)       # launchers stay runnable
+            try:
+                if target.is_file():
+                    (backup / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(target, backup / rel)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(zf.read(info))
+                if info.external_attr >> 16 & 0o111:
+                    target.chmod(target.stat().st_mode | 0o111)       # launchers stay runnable
+            except OSError as e:
+                failed.append(f"{rel}: {e.strerror}")
+                continue
             changed.append(str(rel))
+        if failed:
+            raise ValueError("Some files could not be replaced (" + "; ".join(failed[:3]) + ")")
     (here / ".update_done.json").write_text(json.dumps({"version": version, "notes": notes, "at": time.strftime("%Y-%m-%d %H:%M")}))
     return changed
 
