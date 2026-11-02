@@ -1,0 +1,2 @@
+playwright>=1.45
+segno>=1.6

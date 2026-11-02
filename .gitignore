@@ -1,0 +1,12 @@
+.venv/
+.browser-profile/
+.claude/
+settings.json
+issues_ledger.csv
+qa_from_dashboard/
+server.log
+__pycache__/
+.DS_Store
+.update_backup/
+.update_done.json
+*.zip

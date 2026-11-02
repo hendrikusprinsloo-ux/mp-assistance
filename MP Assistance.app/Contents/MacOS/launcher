@@ -1,0 +1,12 @@
+#!/bin/bash
+# Opens the UI. If the server is not running, starts it in Terminal (Terminal has access to the
+# Documents folder, which a Finder-launched app does not) and the page opens from start.command.
+PROJECT="$(cd "$(dirname "$0")/../../.." && pwd)"
+URL="http://127.0.0.1:8765"
+
+if curl -s -m 2 "$URL/api/settings" >/dev/null 2>&1; then
+  # already running: bring back the tool's windows
+  curl -s -m 5 -X POST -H "Content-Type: application/json" -d '{}' "$URL/api/open" >/dev/null 2>&1
+else
+  open -a Terminal "$PROJECT/start.command"
+fi

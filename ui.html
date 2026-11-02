@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MP Assistance</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("mpTheme") || "dark";   // no flash; settings.json is the source of truth</script>
+<style>
+  /* Colours follow the Parity Manager (Unfold) dark theme */
+  :root {
+    --bg: rgb(29, 31, 35); --surface: rgb(37, 39, 44); --band: rgba(255, 255, 255, .03);
+    --line: rgb(56, 58, 66); --line-strong: rgb(65, 66, 74);
+    --ink: rgb(219, 224, 230); --important: rgb(242, 244, 248); --sub: rgb(168, 176, 189);
+    --accent: rgb(236, 71, 10); --accent-hover: rgb(251, 98, 20);
+    --ok: rgb(52, 190, 110); --bad: rgb(248, 113, 113);
+    --hover: rgba(255, 255, 255, .06); --current-row: rgba(255, 255, 255, .07); --new-row: rgba(236, 71, 10, .16);
+    --scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: rgb(246, 247, 249); --surface: rgb(255, 255, 255); --band: rgba(0, 0, 0, .04);
+    --line: rgb(219, 224, 230); --line-strong: rgb(199, 206, 214);
+    --ink: rgb(65, 66, 74); --important: rgb(29, 31, 35); --sub: rgb(102, 118, 138);
+    --ok: rgb(25, 135, 84); --bad: rgb(192, 57, 43);
+    --hover: rgba(0, 0, 0, .05); --current-row: rgba(0, 0, 0, .06); --new-row: rgba(236, 71, 10, .12);
+    --scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 Inter, -apple-system, system-ui, sans-serif; color: var(--ink); margin: 0; background: var(--bg); color-scheme: var(--scheme); }
+  main { max-width: min(2200px, 100%); margin: 28px auto; padding: 0 20px; }
+  .layout { max-width: 900px; }
+  /* full screen and big monitors: the page, the text and the screenshot boxes grow with the window instead of staying laptop-sized */
+  @media (min-width: 1500px) { main { padding: 0 32px; } .layout { max-width: 1400px; } body { font-size: 15px; } }
+  @media (min-width: 1900px) { .layout { max-width: 1800px; } body { font-size: 16px; } h1 { font-size: 24px; } }
+  @media (min-width: 2400px) { body { font-size: 18px; } }
+  h1 { font-size: 20px; margin: 0; color: var(--important); }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--important); background: var(--band); border-radius: 6px;
+       padding: 9px 12px; margin: 0 0 14px; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; color: var(--important); }
+  select, input[type=text], input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px;
+       font: inherit; background: var(--bg); color: var(--ink); }
+  select:focus, input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  input::placeholder { color: var(--sub); opacity: .7; }
+  input[type=number] { width: 90px; }
+  input[type=checkbox] { accent-color: var(--accent); }
+  .row { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .row label { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 500; color: var(--ink); }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line-strong); background: transparent;
+       color: var(--ink); cursor: pointer; }
+  button:hover:not(:disabled) { background: var(--hover); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.ok { border-color: var(--ok); color: var(--ok); }
+  button.bad { border-color: var(--bad); color: var(--bad); }
+  button:disabled { opacity: .4; cursor: default; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); margin-right: 6px; }
+  .dot.on { background: var(--ok); }
+  .hint { color: var(--sub); font-size: 13px; margin-top: 6px; }
+  #log { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font: 12.5px/1.5 ui-monospace, Menlo, monospace;
+         padding: 12px 14px; border-radius: 6px; height: 300px; overflow: auto; white-space: pre-wrap; margin: 0; }
+  .actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--sub); font-size: 12px; font-weight: 600; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .good { color: var(--ok); } .problem { color: var(--bad); }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  figure { margin: 0; }
+  figcaption { color: var(--sub); font-size: 12px; margin-bottom: 4px; }
+  #revCode { font: 600 14px ui-monospace, Menlo, monospace; color: var(--important); background: transparent; border: 1px solid var(--accent);
+             padding: 6px 12px; min-width: 96px; }
+  #revCode.copied { color: var(--ok); border-color: var(--ok); }
+  .imgbox { height: clamp(300px, 46vh, 1000px); overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+  .imgbox img { display: block; width: 100%; height: auto; cursor: zoom-in; }
+  #revNote { flex: 1; min-width: 160px; width: auto; }
+  .gate { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+  .gate-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px 26px; max-width: 480px; }
+  .gate-card h2 { margin-bottom: 12px; }
+  #viewer { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .9); display: flex; flex-direction: column; }
+  #viewer[hidden] { display: none; }
+  #viewerBar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; color: #fff; }
+  #viewerBar button { color: #fff; border-color: rgba(255, 255, 255, .4); padding: 6px 12px; }
+  #viewerBar button:hover:not(:disabled) { background: rgba(255, 255, 255, .15); }
+  #viewerBar .spacer { flex: 1; }
+  #viewerTitle { font-weight: 600; }
+  #viewerStage { flex: 1; overflow: auto; display: flex; min-height: 0; }
+  #viewerStage img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in; }
+  #viewerStage img.zoomed { max-width: none; max-height: none; cursor: zoom-out; }
+  .qr-box { background: #fff; border-radius: 8px; padding: 6px; width: 280px; height: 280px; margin: 8px auto; }
+  .qr-box svg { width: 100%; height: 100%; display: block; }
+  .qr-url { word-break: break-all; font-size: 12px; max-width: 420px; user-select: all; }
+  button.link { border: none; color: var(--sub); text-decoration: underline; padding: 8px 6px; }
+  #ignoreBtn.on { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+  #log, #appLog { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font: 12.5px/1.5 ui-monospace, Menlo, monospace;
+            padding: 12px 14px; border-radius: 6px; height: 200px; overflow: auto; white-space: pre-wrap; margin: 0; }
+  #appTable input[type=text] { width: 90px; }
+  #limitLine.full { color: var(--bad); }
+  .btn-group { display: inline-flex; }
+  .btn-group button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .btn-group button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+  .banner { display: flex; gap: 12px; align-items: center; margin: 0 0 14px; padding: 10px 14px; border-radius: 8px;
+            border: 1px solid var(--bad); background: rgba(248, 113, 113, .12); color: var(--bad); font-weight: 600; }
+  .banner span { flex: 1; }
+  #dashBtn.over { color: var(--bad); border-color: var(--bad); }
+  #capUsage.over { color: var(--bad); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="loginGate" class="gate">
+  <div class="gate-card">
+    <h2>Sign in to Parity Manager</h2>
+    <p id="gateMsg" style="margin:0 0 6px">Checking your Parity Manager sign-in…</p>
+    <div class="actions">
+      <button id="gateOpen">Open the login window</button>
+      <button id="gateCheck">Check again</button>
+      <button id="gateSkip" class="link" title="Continue without signing in; runs and QA need it later">Skip for now</button>
+    </div>
+  </div>
+</div>
+
+<div id="chainGate" class="gate" hidden>
+  <div class="gate-card" style="min-width:540px">
+    <h2>Which chain are you working on?</h2>
+    <label for="chainSelect">Chain</label>
+    <select id="chainSelect"></select>
+    <div class="row">
+      <label>Daily limit <input type="number" id="capWeb" min="0" max="999"></label>
+      <label id="capAppLabel" hidden>Mobile App limit <input type="number" id="capApp" min="0" max="999"></label>
+    </div>
+    <div class="hint" style="margin-top:12px">Web issues per channel for this chain (0 = no limit)</div>
+    <div class="row" style="margin-top:4px">
+      <label>Priceline <input type="number" id="capCh_priceline" min="0" max="999"></label>
+      <label>Booking.com <input type="number" id="capCh_bookingdotcom" min="0" max="999"></label>
+      <label>Expedia <input type="number" id="capCh_expedia" min="0" max="999"></label>
+    </div>
+    <div id="capChUsage" class="hint"></div>
+    <div id="capUsage" class="hint"></div>
+    <div class="actions"><button class="primary" id="chainContinue">Continue</button></div>
+  </div>
+</div>
+
+<div id="viewer" hidden>
+  <div id="viewerBar">
+    <button id="viewerPrev" title="Previous screenshot of this issue (left arrow)">‹</button>
+    <button id="viewerNext" title="Next screenshot of this issue (right arrow)">›</button>
+    <span id="viewerTitle"></span><span id="viewerPos" class="hint" style="margin:0;color:#ccc"></span>
+    <span class="spacer"></span>
+    <button id="viewerOut" title="Zoom out (-)">−</button>
+    <button id="viewerIn" title="Zoom in (+)">+</button>
+    <button id="viewerFit" title="Fit to the window (0)">Fit</button>
+    <button id="viewerFull" title="Actual size (1)">100%</button>
+    <button id="viewerWin" title="Open the image in a window of its own">New window</button>
+    <button id="viewerClose" title="Close (Esc)">Close ✕</button>
+  </div>
+  <div id="viewerStage"><img id="viewerImg" alt=""></div>
+</div>
+
+<div id="qrGate" class="gate" hidden style="background:rgba(0,0,0,.55)">
+  <div class="gate-card" style="min-width:340px">
+    <h2 id="qrTitle">Phone link</h2>
+    <div class="hint" id="qrNote">Scan with the phone to open the page it redirects to.</div>
+    <div class="qr-box" id="qrBox"></div>
+    <div class="hint qr-url" id="qrUrl"></div>
+    <div class="actions">
+      <button class="primary" id="qrOpen" disabled>Open page ↗</button>
+      <button id="qrCopy" disabled>Copy link</button>
+      <span class="spacer"></span>
+      <button id="qrClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="actions" style="margin:0 0 18px"><h1>MP Assistance</h1><span class="hint" id="versionTag" style="margin:0 0 0 8px"></span><span class="spacer"></span><span class="btn-group"><button id="chainBtn" title="Change the chain or its limits">Chain</button><button id="dashBtn" disabled title="Choose a chain first">–</button></span><button id="ignoreBtn" title="Let runs and saves go past the daily limits (for a demo). Starts off every time the app starts.">Ignore limits: off</button><button id="themeBtn" title="Switch between dark and light mode"></button><button id="quitAppBtn">Quit app</button></div>
+
+  <div id="updBanner" class="banner" hidden style="border-color:var(--accent);background:rgba(236,71,10,.10);color:var(--ink)">
+    <span id="updText"></span>
+    <button class="primary" id="updInstall">Update now</button>
+    <button id="updLater">Later</button>
+  </div>
+  <div id="updNotes" class="gate" hidden>
+    <div class="gate-card" style="min-width:420px;max-width:560px">
+      <h2 id="updNotesTitle">Updated</h2>
+      <pre id="updNotesBody" style="white-space:pre-wrap;font:13px/1.5 inherit;max-height:50vh;overflow:auto;margin:10px 0"></pre>
+      <div class="actions"><button class="primary" id="updNotesOk">Got it</button></div>
+    </div>
+  </div>
+
+  <div id="capError" class="banner" hidden>
+    <span id="capErrorText"></span>
+    <button id="capErrorBtn">Open dashboard</button>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab" id="tabUpload">Upload</button>
+    <button class="tab" id="tabApp" hidden>Mobile App</button>
+    <button class="tab" id="tabQa">QA</button>
+  </nav>
+
+  <div id="panelUpload">
+  <div class="layout">
+  <div>
+  <section>
+    <h2>1. Chrome</h2>
+    <button id="chromeBtn">Open Chrome for the tool</button>
+    <button id="arrangeBtn" title="Tool window on the left half of this screen, Parity Manager on the right half">Arrange windows</button>
+    <span style="margin-left:12px"><span class="dot" id="chromeDot"></span><span id="chromeText">not running</span></span>
+    <div class="hint">Opens a new Parity Manager window in the tool's Chrome. Sign in there once; the tool opens each issue in a new tab.</div>
+  </section>
+
+  <section>
+    <h2>2. Results CSV</h2>
+    <div class="actions" style="margin:0">
+      <button id="pickBtn">Choose file…</button>
+      <span id="csvName" class="hint" style="margin:0;word-break:break-all">No file chosen</span>
+    </div>
+    <input type="hidden" id="csvSelect">
+    <div class="row">
+      <label><input type="checkbox" id="dryRun"> Dry run (preview only)</label>
+      <label>Limit rows <input type="number" id="limit" min="1" placeholder="all remaining"></label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="runBtn">Start</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <span id="runState" class="hint" style="margin:0"></span>
+      <span id="limitLine" class="hint" style="margin:0"></span>
+    </div>
+    <details id="confirmedList" style="margin-top:10px">
+      <summary id="confirmedSummary" class="hint" style="cursor:pointer;margin:0">Confirmed on the dashboard today</summary>
+      <table id="confirmedTable"></table>
+    </details>
+  </section>
+
+  <section>
+    <h2>3. Run</h2>
+    <div id="uRun"></div>
+  </section>
+
+
+  <section>
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+
+  </div>
+
+  </div>
+  </div>
+
+  <div id="panelApp" hidden>
+  <section>
+    <h2>1. Results CSV</h2>
+    <div class="actions" style="margin:0">
+      <button id="appPickBtn">Choose file…</button>
+      <button id="appFollowBtn" title="Use the file chosen on the Upload tab">Use the Upload file</button>
+      <span id="appCsvName" class="hint" style="margin:0;word-break:break-all">No file chosen</span>
+    </div>
+    <input type="hidden" id="appCsvPath">
+    <div class="hint">Mobile App issues can be raised for Booking.com and Expedia rows that are lower than brand and have no issue yet today for that hotel on that channel (one issue per channel per subscription). They use the same form with the channel platform set to Mobile App, the base screenshot from the results file, and your phone screenshot and rate for the channel.</div>
+  </section>
+
+  <section>
+    <h2>2. Issues</h2>
+    <div id="appMsg" class="hint" style="margin:0 0 10px"></div>
+    <div id="appSummary" class="hint" style="margin:0 0 10px"></div>
+    <div id="appSkipped" class="hint" style="margin:0 0 10px"></div>
+    <div id="appDoneNote" class="hint" style="margin:0 0 10px" hidden></div>
+    <table id="appTable"></table>
+    <div class="actions"><button id="appDrive" title="Put the phone screenshots into today's folder on Google Drive (Choice Mobile APP screenshots / year / month / day), made if it does not exist yet">Send screenshots to Drive</button><span id="appDriveMsg" class="hint" style="margin:0"></span></div>
+    <div class="actions"><button id="appCheckLinks" title="Follow every row's redirect link and see which ones work">Check all links</button><span id="appLinksMsg" class="hint" style="margin:0"></span></div>
+    <div class="hint">Choose the phone screenshot (JPEG or PNG from AirDrop; a copy is saved with a .png name and the original is left alone) and type the rate the screenshot shows. A row is ready once it has both.</div>
+    <div class="actions">
+      <button class="primary" id="appRun" disabled>Upload ready issues</button>
+      <button id="appStop" disabled>Stop</button>
+      <span class="spacer"></span>
+      <span id="appRunState" class="hint" style="margin:0"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Run</h2>
+    <div id="aRun"></div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <pre id="appLog"></pre>
+  </section>
+  </div>
+
+  <div id="panelQa" hidden>
+  <section>
+    <h2>Review</h2>
+    <div class="actions" style="margin:0 0 10px">
+      <button id="qaDashBtn" title="Pull today's confirmed issues for the chosen chain from the Mobile Parity dashboard">Load from the dashboard</button>
+      <button id="qaSkipBtn" title="Leave out issues already marked OK in a QA cache file someone gave you">Skip issues from a QA cache…</button>
+      <span id="qaCsv" class="hint" style="margin:0;word-break:break-all">none chosen</span>
+    </div>
+    <div id="qaSkipMsg" class="hint" style="margin:0 0 10px" hidden></div>
+    <input type="hidden" id="qaCsvPath">
+    <div class="hint" style="margin:0 0 10px">Opening this tab loads the issues Parity Manager has confirmed today for the chosen chain. Their values are read from the issues themselves; check them against the Lighthouse screenshots and mark each <b>Looks right</b> or <b>Problem</b>. To leave out issues a colleague has already QAed, use <b>Skip issues from a QA cache…</b> and choose their <code>qa-cache_….csv</code>.</div>
+    <div id="revEmpty" class="hint" style="margin:0"></div>
+    <div id="revCard" hidden>
+      <div class="actions" style="margin:0 0 10px">
+        <button id="revPrev">‹</button>
+        <span id="revPos"></span>
+        <button id="revNext">›</button>
+        <span id="revTitle" style="font-weight:600;color:var(--important);margin-left:8px"></span>
+        <button id="revCode" title="Click to copy the brand code"></button>
+        <span class="spacer"></span>
+        <span id="revCount" class="hint" style="margin:0"></span>
+      </div>
+      <div class="actions" style="margin:0">
+        <button class="primary" id="revOpen">Open issue + Geoinsight</button>
+        <span id="revMsg" class="hint" style="margin:0"></span>
+      </div>
+      <div class="hint">Opens two windows in the tool's Chrome (the issue, and its Geoinsight page). Drag each to its own screen once; they are reused for every issue.</div>
+      <table id="revTable" style="margin-top:10px"></table>
+      <div id="shotMsg" class="hint">Lighthouse screenshots load here.</div>
+      <div class="shots">
+        <figure><figcaption id="shotCap0">Lighthouse screenshot</figcaption><div class="imgbox"><img id="shot0" alt="Lighthouse screenshot 1"></div></figure>
+        <figure><figcaption id="shotCap1">Lighthouse screenshot</figcaption><div class="imgbox"><img id="shot1" alt="Lighthouse screenshot 2"></div></figure>
+      </div>
+      <div class="actions">
+        <button class="ok" id="revOk">Looks right</button>
+        <button class="bad" id="revBad">Problem</button>
+        <input type="text" id="revNote" placeholder="Note (optional)">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>QA report</h2>
+    <div class="actions" style="margin:0">
+      <button class="primary" id="qaExport" disabled>Download QA report</button>
+      <span id="qaMsg" class="hint" style="margin:0"></span>
+    </div>
+    <div id="qaDone" class="hint good" hidden></div>
+    <div class="actions" style="margin:8px 0 0">
+      <button id="qaCacheBtn" disabled>Download my QA cache</button>
+      <span id="qaCacheMsg" class="hint" style="margin:0"></span>
+    </div>
+    <div class="hint">Your running record of the issues you have QAed, kept next to the done file as <code>qa-cache_&lt;name&gt;.csv</code> (it carries your name, the time, and your result for each issue) and updated with every mark. It is kept when a file is loaded fresh again.</div>
+    <div class="hint">Lists every saved issue with the values entered, the issue link, the field check and your QA result and note. It is kept up to date next to the done file as <code>qa_&lt;name&gt;.csv</code> while issues remain, and becomes <code>COMPLETED_qa_&lt;name&gt;.csv</code> once every issue is marked <b>Looks right</b> or <b>Problem</b>. The download unlocks at that point.</div>
+  </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let since = 0;
+let wasRunning = false, lastCountPoll = 0;
+let chains = [], savedChain = "", appChain = "", sfAccounts = {}, chain = "", limits = null, popupLimits = null, settingsReady = null;
+let revItems = [], revIdx = 0, revResults = {}, revCsv = "", shownKey = "";
+const qaCsvValue = () => $("qaCsvPath").value;     // the QA tab's own file; the Upload tab keeps #csvSelect
+
+async function setQaCsv(path, fresh = true) {
+  // every file loaded into QA starts fresh: earlier marks for it are set aside by the server, not reused
+  if (fresh && path) await api("/api/qa/start", { csv: path });
+  revCsv = ""; revResults = {}; shownKey = "";
+  $("qaCsvPath").value = path;
+  await loadReview(true);
+}
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+const fail = e => alert(e.message);
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("mpTheme", theme);
+  $("themeBtn").textContent = theme === "dark" ? "☀ Light mode" : "☾ Dark mode";
+}
+$("themeBtn").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(next);
+  api("/api/theme", { theme: next }).catch(fail);   // saved in settings.json for next time
+};
+const enc = encodeURIComponent;
+
+function renderCsvName() {
+  const path = $("csvSelect").value;
+  $("csvName").textContent = path ? path.split("/").slice(-2).join(" / ") : "No file chosen";
+  $("csvName").title = path;
+}
+
+function setCsv(path) {
+  $("csvSelect").value = path;
+  renderCsvName();
+}
+$("pickBtn").onclick = async () => {
+  $("pickBtn").disabled = true; $("csvName").textContent = "Waiting for the file dialog…";
+  try {
+    const r = await api("/api/pick", {});
+    if (r.cancelled) renderCsvName(); else setCsv(r.path);     // cancelling must leave both tabs' files alone
+  } catch (e) { renderCsvName(); fail(e); }
+  $("pickBtn").disabled = false;
+};
+
+async function loadSettings() {
+  const s = await api("/api/settings");
+  chains = s.chains; savedChain = s.chain; appChain = s.app_chain; sfAccounts = s.sf_accounts;
+  $("versionTag").textContent = s.version ? "v" + s.version : "";
+  applyTheme(s.theme);
+  // in app mode the windows are tidied once, shortly after the tool window opens (the Parity Manager window may still be loading)
+  if (s.app_mode) setTimeout(() => api("/api/arrange", { ...screenArea(), auto: true }).catch(() => {}), 4000);
+}
+
+const REVIEW_MARK = { ok: ["✓", "good"], problem: ["✗", "problem"], "": ["–", ""] };
+
+/* ---- review one by one ---- */
+// Lighthouse's own screenshots, read from the issue's Geoinsight page (they match what was uploaded)
+const shotsLoading = new Set();
+
+function clearShots() {
+  document.querySelectorAll("#revCard .imgbox").forEach(b => { b.scrollTop = 0; });
+  for (const n of [0, 1]) { $("shot" + n).removeAttribute("src"); $("shotCap" + n).textContent = "Lighthouse screenshot"; }
+}
+
+async function loadShots(item) {
+  clearShots();
+  if (!item.issue_id) { $("shotMsg").textContent = "No issue id was recorded for this issue, so its Lighthouse screenshots can't be loaded."; return; }
+  if (shotsLoading.has(item.key)) return;
+  shotsLoading.add(item.key);
+  $("shotMsg").textContent = "Loading Lighthouse screenshots… this can take up to a minute for long pages.";
+  let res = null, error = "";
+  try { res = await api("/api/review/geo", { csv: qaCsvValue(), key: item.key }); }
+  catch (e) { error = e.message; }
+  shotsLoading.delete(item.key);
+  if (!revItems[revIdx] || revItems[revIdx].key !== item.key) return;       // moved on while loading
+  if (!res) { $("shotMsg").textContent = "Couldn't load the Lighthouse screenshots: " + error; return; }
+  res.images.slice(0, 2).forEach((img, n) => {
+    $("shotCap" + n).textContent = `${img.label} (Lighthouse), ${img.w} × ${img.h}px`;
+    $("shot" + n).src = img.url;
+  });
+  $("shotMsg").textContent = "";
+}
+
+async function loadReview(full) {
+  const csv = qaCsvValue();
+  if (csv !== revCsv) { revCsv = csv; revIdx = 0; revResults = {}; }
+  const keepKey = revItems[revIdx] && revItems[revIdx].key;
+  revItems = csv ? (await api("/api/review/items?csv=" + enc(csv))).items : [];
+  const at = revItems.findIndex(i => i.key === keepKey);
+  revIdx = at >= 0 ? at : Math.min(revIdx, Math.max(revItems.length - 1, 0));
+  renderReview(full);
+}
+
+function updateQaReport() {
+  const n = revItems.length, done = revItems.filter(i => i.review).length;
+  $("qaCsv").textContent = qaCsvValue() ? qaCsvValue().split("/").slice(-2).join(" / ") : "none chosen";
+  $("qaCsv").title = qaCsvValue();
+  $("qaExport").disabled = !(n > 0 && done === n);
+  $("qaMsg").textContent = n === 0 ? "No saved issues yet." : done === n ? "All issues reviewed." : `${n - done} of ${n} issues still need QA.`;
+  if (done !== n) $("qaDone").hidden = true;
+  $("qaCacheBtn").disabled = !done;
+  $("qaCacheMsg").textContent = done ? `${done} issue${done === 1 ? "" : "s"} QAed so far.` : "";
+}
+
+// What the field check found, kept with the QA mark and written into the report
+function checkSummary(res) {
+  if (!res) return "not checked";
+  if (revItems[revIdx] && revItems[revIdx].key.startsWith("dashboard|")) return "Confirmed against the screenshots";
+  const bad = res.checks.filter(c => c.ok === false);
+  return bad.length ? bad.map(c => `${c.field}: expected ${fmt(c.expected)}, issue has ${fmt(c.actual)}`).join("; ")
+                    : `All ${res.checks.filter(c => c.ok !== null).length} checked fields match`;
+}
+
+// Issues pulled from the dashboard have no hotel name until the issue itself has been read
+const reviewName = item => item.hotel_name || (revResults[item.key] && revResults[item.key].hotel_name) || `Subscription ${item.subscription_id}`;
+
+function renderReview(full) {
+  const n = revItems.length, item = revItems[revIdx];
+  $("revEmpty").hidden = !!item; $("revCard").hidden = !item;
+  $("revEmpty").textContent = qaCsvValue()
+    ? "No issues to QA for this chain today."
+    : "Loading today's issues for the chosen chain…";
+  $("revCount").textContent = n ? `${revItems.filter(i => i.review).length} of ${n} reviewed` : "";
+  updateQaReport();
+  if (!item) { clearShots(); shownKey = ""; return; }
+  $("revPos").textContent = `${revIdx + 1} / ${n}`;
+  $("revPrev").disabled = revIdx === 0; $("revNext").disabled = revIdx === n - 1;
+  const [mark, cls] = REVIEW_MARK[item.review] || REVIEW_MARK[""];
+  $("revTitle").textContent = `${reviewName(item)} · ${item.OTA_name}  ${item.review ? mark : ""}`;
+  $("revTitle").className = cls;
+  $("revCode").textContent = codeLabel(item);
+  $("revCode").classList.remove("copied");
+  // Background refreshes (every 2 s during a run) must not wipe a note being typed or reload the screenshots
+  if (!full && item.key === shownKey) return;
+  shownKey = item.key;
+  $("revNote").value = item.note || "";
+  $("revMsg").textContent = item.issue_id ? "" : "No issue id recorded for this one (saved before reviews existed).";
+  $("revOpen").disabled = !item.issue_id;
+  loadShots(item);       // only the current issue's screenshots are kept in the page, to keep memory low
+  renderTable();
+  autoCheck(item);
+}
+
+const checking = new Set();
+const fmt = v => typeof v === "boolean" ? (v ? "ticked" : "not ticked") : v === null ? "missing" : String(v);
+
+function renderTable() {
+  const item = revItems[revIdx];
+  const table = $("revTable"); table.textContent = "";
+  if (!item) return;
+  const res = revResults[item.key];
+  // the expected values are always shown; the issue's own values fill in once they have been read
+  const rows = res ? res.checks : item.expected.map(e => ({ field: e.field, expected: e.expected, pending: true }));
+  const fromDash = item.key.startsWith("dashboard|");        // nothing was entered for these: just the issue's own values, to compare with the screenshots
+  const head = table.createTHead().insertRow();
+  for (const h of fromDash ? ["Field", "On the issue"] : ["Field", "Expected (CSV)", "On the issue", ""]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  const body = table.createTBody();
+  for (const c of rows) {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = c.field;
+    if (!fromDash) tr.insertCell().textContent = fmt(c.expected);
+    tr.insertCell().textContent = c.pending ? (checking.has(item.key) ? "checking…" : "–") : fmt(c.actual);
+    if (fromDash) continue;
+    const td = tr.insertCell();
+    td.textContent = c.pending || c.ok === null ? "" : c.ok ? "✓" : "✗"; td.className = c.pending || c.ok === null ? "" : c.ok ? "good" : "problem";
+  }
+}
+
+function showResultMsg(res) {
+  if (revItems[revIdx] && revItems[revIdx].key.startsWith("dashboard|")) { $("revMsg").textContent = "Compare the values with the screenshots."; $("revMsg").className = "hint"; return; }
+  $("revMsg").textContent = res.all_ok ? "Fields match the CSV." : "Some fields differ from the CSV.";
+  $("revMsg").className = "hint " + (res.all_ok ? "good" : "problem");
+}
+
+// Reads the saved issue in the background (no windows) as soon as an issue is shown
+async function autoCheck(item) {
+  if (!item.issue_id || revResults[item.key] || checking.has(item.key)) return;
+  checking.add(item.key); renderTable();
+  let res = null, error = "";
+  try { res = await api("/api/review/check", { csv: qaCsvValue(), key: item.key }); }
+  catch (e) { error = e.message; }
+  checking.delete(item.key);
+  if (res) revResults[item.key] = res;
+  if (!revItems[revIdx] || revItems[revIdx].key !== item.key) return;   // moved on while it was loading
+  renderTable();
+  renderReview();                                   // the title can show the hotel name now
+  if (res) showResultMsg(res);
+  else { $("revMsg").textContent = "Couldn't read the issue yet: " + error; $("revMsg").className = "hint problem"; }
+}
+
+function selectReview(key) {
+  const at = revItems.findIndex(i => i.key === key);
+  if (at < 0) return;
+  revIdx = at; renderReview(true);
+}
+// Brand codes are copied without any spaces, ready to paste into the sheet's search
+const codeLabel = item => `⧉ ${item.brand_code}`;
+const plainCode = code => String(code).replace(/\s+/g, "");
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return; } catch (e) { /* fall back below */ }
+  const box = document.createElement("textarea");
+  box.value = text; box.style.position = "fixed"; box.style.opacity = "0";
+  document.body.appendChild(box); box.select(); document.execCommand("copy"); box.remove();
+}
+
+$("qaExport").onclick = async () => {
+  const csv = qaCsvValue();
+  $("qaExport").disabled = true;
+  try {
+    const res = await fetch("/api/qa/export?csv=" + enc(csv));
+    if (!res.ok) throw new Error((await res.json()).error);
+    const saved = res.headers.get("X-Report-Path");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = res.headers.get("X-Report-Name") || "COMPLETED_qa.csv";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    $("qaDone").textContent = saved ? `Downloaded. A copy was saved as ${saved}` : "Downloaded (it could not be saved next to the done file).";
+    $("qaDone").hidden = false;
+  } catch (e) { fail(e); }
+  updateQaReport();
+};
+
+$("qaCacheBtn").onclick = async () => {
+  try {
+    const res = await fetch("/api/qa/cache?csv=" + enc(qaCsvValue()));
+    if (!res.ok) throw new Error((await res.json()).error);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = res.headers.get("X-Report-Name") || "qa-cache.csv";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  } catch (e) { fail(e); }
+};
+
+/* ---- chain and daily limits ---- */
+const WEB_CH = ["priceline", "bookingdotcom", "expedia"];
+const CHANNEL_NAMES = { bookingdotcom: "Booking.com", expedia: "Expedia" };
+
+$("dashBtn").onclick = () => {
+  if (!limits || !limits.dashboard_url) return;
+  const win = window.open("about:blank", "mp_dashboard");   // the same window every time, so they do not pile up
+  if (!win) return alert("The dashboard window was blocked. Allow pop-ups for this page and try again.");
+  win.opener = null;                                          // the Parity Manager page gets no hold on this one
+  win.location = limits.dashboard_url;
+};
+$("ignoreBtn").onclick = async () => {
+  const turnOn = !(limits && limits.ignore_cap);
+  if (turnOn && !confirm("Ignore the daily limits? Runs and saves will no longer be stopped at the cap, and they create real issues in Parity Manager. This resets when the app restarts.")) return;
+  try { await api("/api/ignore-cap", { on: turnOn }); await refreshLimits(); } catch (e) { fail(e); }
+};
+$("capErrorBtn").onclick = () => $("dashBtn").click();
+
+function applyChain() {
+  $("dashBtn").disabled = !limits;
+  $("tabApp").hidden = chain !== appChain;          // Mobile App issues are only taken for one chain
+  if (chain !== appChain && !$("panelApp").hidden) showTab("upload");
+}
+
+function sourceNote(l) {   // where the count comes from: the dashboard sees everyone's issues, this computer only its own
+  return l.source === "dashboard" ? `from the dashboard at ${l.checked_at}`
+    : `this computer's count${l.dashboard_error ? `: ${l.dashboard_error}` : ""}`;
+}
+
+let confirmedSig = "";
+function renderConfirmed() {
+  const issues = limits.issues || [];
+  $("confirmedSummary").textContent = `Confirmed on the dashboard today (${issues.length})`;
+  const sig = chain + "|" + issues.map(i => i.issue_id).join(",");
+  if (sig === confirmedSig) return;                  // nothing new: leave an open list alone
+  confirmedSig = sig;
+  const table = $("confirmedTable"); table.textContent = "";
+  if (!issues.length) return;
+  const head = table.createTHead().insertRow();
+  for (const h of ["Subscription id", "Channel", "Issue id"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  const body = table.createTBody();
+  for (const i of issues) {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = i.subscription_id;
+    tr.insertCell().textContent = CHANNEL_NAMES[i.channel] || i.channel;
+    tr.insertCell().textContent = i.issue_id;
+  }
+}
+
+function renderLimits() {
+  if (!limits) return;
+  const l = limits, left = Math.max(l.web_remaining, 0);
+  $("chainBtn").textContent = `${chain} ▾`;                                   // opens the chain and limits popup
+  $("dashBtn").textContent = `${l.used_total}/${l.total_cap} ↗`;               // confirmed today, which opens the dashboard
+  $("dashBtn").title = `Open dashboard: today's Mobile Parity Issues for ${chain} in Parity Manager (${sourceNote(l)})`;
+  $("dashBtn").classList.toggle("over", l.over);
+  const split = l.caps.app ? ` (${l.caps.web} web + ${l.caps.app} Mobile App)` : "";
+  $("limitLine").textContent = `${l.used_total} of ${l.total_cap} issues confirmed today${split}, ${left} left for Upload · ${sourceNote(l)}`;
+  const full = Object.values(l.channels).filter(c => c.remaining !== null && c.remaining <= 0).map(c => c.name);
+  const per = Object.values(l.channels).map(c => `${c.name} ${c.used}${c.cap ? "/" + c.cap : ""}`).join(" · ");
+  $("limitLine").textContent += ` · ${per}${full.length ? ` (${full.join(", ")} full)` : ""}`;
+  $("limitLine").classList.toggle("full", left === 0 || l.over);
+  $("capError").hidden = !l.over && !l.ignore_cap;                             // more confirmed than the limit allows, or the limits are off
+  if (l.ignore_cap) $("capErrorText").textContent = `Limits are ignored: ${chain} has ${l.used_total} of ${l.total_cap} issues confirmed today and runs and saves will not be held to it. One issue per channel per subscription still applies.`;
+  else if (l.over) $("capErrorText").textContent = `Over the limit: ${chain} has ${l.used_total} confirmed issues today, the limit is ${l.total_cap}. Check the dashboard.`;
+  $("ignoreBtn").classList.toggle("on", !!l.ignore_cap);
+  $("ignoreBtn").textContent = `Ignore limits: ${l.ignore_cap ? "ON" : "off"}`;
+  renderConfirmed();
+}
+
+async function refreshLimits(fresh = false) {
+  if (!chain) return;
+  limits = await api("/api/limits?chain=" + enc(chain) + (fresh ? "&fresh=1" : ""));
+  renderLimits();
+  if (!$("panelApp").hidden) renderApp();
+}
+
+async function openChainGate() {
+  await settingsReady;
+  $("chainGate").hidden = false;
+  if (!$("chainSelect").options.length) $("chainSelect").innerHTML = chains.map(c => `<option>${c}</option>`).join("");
+  $("chainSelect").value = chain || savedChain;
+  await fillChainGate();
+}
+
+async function fillChainGate() {                      // the numbers follow the chain picked, and today's use of them
+  const picked = $("chainSelect").value;
+  popupLimits = await api("/api/limits?chain=" + enc(picked) + "&fresh=1");   // a fresh look at the dashboard
+  $("capWeb").value = popupLimits.caps.web; $("capApp").value = popupLimits.caps.app;
+  $("capAppLabel").hidden = picked !== appChain;
+  for (const ch of WEB_CH) $("capCh_" + ch).value = popupLimits.channels[ch].cap;
+  updateCapUsage();
+}
+
+function updateCapUsage() {
+  const l = popupLimits, picked = $("chainSelect").value, web = Number($("capWeb").value) || 0;
+  const app = picked === appChain ? (Number($("capApp").value) || 0) : l.caps.app, total = web + app;
+  let text = `Confirmed today: ${l.used_total} (${sourceNote(l)}). Limit ${total}${app ? ` = ${web} web + ${app} Mobile App` : ""}, ` +
+             `${Math.max(total - l.used_total, 0)} left.`;
+  if (l.used_total > total) text += " That is over the limit.";
+  if (picked === appChain) text += ` Mobile App: ${l.used.app} done here (${Math.floor(app / 2)} each for Booking.com and Expedia).`;
+  $("capUsage").textContent = text;
+  $("capUsage").classList.toggle("over", l.used_total > total);
+  const parts = WEB_CH.map(ch => { const cap = Number($("capCh_" + ch).value) || 0, c = l.channels[ch];
+    return `${c.name}: ${c.used} today${cap ? ` of ${cap}` : ", no limit"}`; });
+  $("capChUsage").textContent = parts.join("  ·  ");
+}
+$("chainSelect").addEventListener("change", () => fillChainGate().catch(fail));
+$("capWeb").addEventListener("input", () => popupLimits && updateCapUsage());
+$("capApp").addEventListener("input", () => popupLimits && updateCapUsage());
+for (const ch of ["priceline", "bookingdotcom", "expedia"]) $("capCh_" + ch).addEventListener("input", () => popupLimits && updateCapUsage());
+$("chainBtn").onclick = () => openChainGate().catch(fail);
+$("chainContinue").onclick = async () => {
+  const picked = $("chainSelect").value, body = { chain: picked, web: $("capWeb").value };
+  if (picked === appChain) body.app = $("capApp").value;
+  body.channels = Object.fromEntries(WEB_CH.map(ch => [ch, $("capCh_" + ch).value || 0]));
+  try { await api("/api/limits", body); await api("/api/chain", { chain: picked }); } catch (e) { return fail(e); }
+  const changed = picked !== chain;
+  chain = picked; $("chainGate").hidden = true;
+  await refreshLimits(); applyChain();
+  if (changed && !$("panelApp").hidden) loadApp().catch(() => {});
+};
+
+/* ---- Mobile App tab ---- */
+let appData = null;
+
+function appLabel(path) { return path ? path.split("/").slice(-2).join(" / ") : "No file chosen"; }
+
+async function setAppCsv(path) {
+  $("appCsvPath").value = path; linkChecks = {}; $("appLinksMsg").textContent = "";
+  $("appCsvName").textContent = appLabel(path); $("appCsvName").title = path;
+  await loadApp();
+}
+
+async function loadApp() {
+  const csv = $("appCsvPath").value || $("csvSelect").value;   // the Upload file unless one is chosen here
+  if (csv && !$("appCsvPath").value) { $("appCsvPath").value = csv; $("appCsvName").textContent = appLabel(csv); }
+  appData = await api(`/api/app/eligible?csv=${enc(csv)}&chain=${enc(chain)}`);
+  renderApp();
+}
+
+function appReady() { return appData ? appData.rows.filter(r => r.shot && r.rate) : []; }
+
+function renderApp() {
+  const data = appData, table = $("appTable");
+  table.textContent = "";
+  if (!data) return;
+  $("appMsg").textContent = !data.allowed ? data.message
+    : data.rows.length ? "" : "No eligible issues in this file: nothing lower than brand on Booking.com or Expedia, or those hotels already have an issue today.";
+  const skipped = Object.entries(data.skipped || {});
+  $("appSkipped").textContent = skipped.length ? "Left out: " + skipped.map(([why, n]) => `${n} ${why}`).join("; ") : "";
+  const doneNote = data.done_file && data.done_file.count > 0;       // a done file with nothing saved in it hides no rows
+  $("appDoneNote").hidden = !doneNote;
+  if (doneNote) $("appDoneNote").textContent = `${data.done_file.name} is next to this file and has ${data.done_file.count} issue(s). Rows already saved there are skipped. Delete it to start the file again.`;
+  if (!data.allowed) { $("appSummary").textContent = ""; $("appRun").disabled = true; return; }
+  const ready = appReady();
+  $("appSummary").textContent = Object.keys(CHANNEL_NAMES).map(ch => {
+    const used = data.used.app_by_channel[ch] || 0;
+    const n = ready.filter(r => r.OTA_name === ch).length;
+    return `${CHANNEL_NAMES[ch]}: ${used} of ${data.app_per_channel} used today, ${n} ready`;
+  }).join("  ·  ");
+  $("appRun").textContent = ready.length ? `Upload ${ready.length} ready issue${ready.length === 1 ? "" : "s"}` : "Upload ready issues";
+  $("appRun").disabled = !ready.length || wasRunning;
+  if (!data.rows.length) return;
+  const head = table.createTHead().insertRow();
+  for (const h of ["Hotel", "Channel", "Base rate", "Web rate", "Phone link", "Phone screenshot", "App rate", ""]) {
+    const th = document.createElement("th"); th.textContent = h; head.appendChild(th);
+  }
+  const body = table.createTBody();
+  for (const r of data.rows) {
+    const tr = body.insertRow();
+    const hotel = tr.insertCell(); hotel.textContent = `${r.hotel_name} (${r.brand_code})`;
+    if (r.base_shot_missing) { hotel.append(" ⚠"); hotel.title = "The base screenshot file was not found next to the results file: a run would fail on this row."; }
+    tr.insertCell().textContent = CHANNEL_NAMES[r.OTA_name] || r.OTA_name;
+    tr.insertCell().textContent = r.base_rate;
+    tr.insertCell().textContent = r.web_rate;
+    const qrBtn = document.createElement("button");
+    const lk = linkChecks[r.key];
+    qrBtn.textContent = (lk ? (lk.ok ? "✓ " : "✗ ") : "") + "QR / link";
+    qrBtn.title = lk && !lk.ok ? lk.error : "Show the OTA page link as a QR code to scan with the phone";
+    qrBtn.onclick = () => showQr(r).catch(fail);
+    tr.insertCell().appendChild(qrBtn);
+    const shotBtn = document.createElement("button");
+    shotBtn.textContent = r.shot ? `✓ ${r.shot_name || "chosen"} (change)` : "Choose phone screenshot…";
+    shotBtn.onclick = async () => {
+      shotBtn.disabled = true; shotBtn.textContent = "Waiting for the file dialog…";
+      try { await api("/api/app/shot", { csv: $("appCsvPath").value, chain, key: r.key }); } catch (e) { fail(e); }
+      loadApp().catch(fail);
+    };
+    tr.insertCell().appendChild(shotBtn);
+    const rate = document.createElement("input");
+    rate.type = "text"; rate.placeholder = "e.g. 76"; rate.value = r.rate;
+    rate.onchange = async () => {                       // saved as typed; a bad value is refused and put back
+      try { await api("/api/app/rate", { csv: $("appCsvPath").value, chain, key: r.key, rate: rate.value }); r.rate = rate.value.trim().replace(",", "."); }
+      catch (e) { fail(e); rate.value = r.rate; }
+      renderApp();
+    };
+    tr.insertCell().appendChild(rate);
+    const mark = tr.insertCell(); mark.textContent = r.shot && r.rate ? "✓" : ""; mark.className = "good";
+  }
+}
+
+/* the OTA page a row's redirect link lands on, as a QR code for the phone screenshot */
+let qrUrl = "", qrToken = 0, linkChecks = {};
+$("appDrive").onclick = async () => {
+  $("appDrive").disabled = true;
+  $("appDriveMsg").replaceChildren(document.createTextNode("Sending to Google Drive… this can take a minute or two."));
+  try {
+    const r = await api("/api/app/drive", { csv: $("appCsvPath").value, chain });
+    const bits = [];
+    if (r.created && r.created.length) bits.push(`created ${r.created.join(" / ")}`);
+    bits.push(`${r.uploaded.length} sent`); if (r.skipped.length) bits.push(`${r.skipped.length} already there`);
+    const link = document.createElement("a"); link.href = r.folder_url; link.textContent = "Open the folder"; link.target = "mp_drive_folder"; link.rel = "noopener";
+    $("appDriveMsg").replaceChildren(document.createTextNode(bits.join(", ") + ". "), link);
+  } catch (e) { $("appDriveMsg").textContent = ""; fail(e); }
+  $("appDrive").disabled = false;
+};
+$("appCheckLinks").onclick = async () => {
+  $("appCheckLinks").disabled = true; $("appLinksMsg").textContent = "Checking the links…";
+  try {
+    linkChecks = (await api("/api/app/links", { csv: $("appCsvPath").value, chain })).links;
+    const bad = Object.values(linkChecks).filter(l => !l.ok).length;
+    $("appLinksMsg").textContent = bad ? `${bad} of ${Object.keys(linkChecks).length} links failed: hover the ✗ buttons for the reason.` : `All ${Object.keys(linkChecks).length} links work.`;
+    renderApp();
+  } catch (e) { $("appLinksMsg").textContent = ""; fail(e); }
+  $("appCheckLinks").disabled = false;
+};
+async function showQr(r) {
+  const token = ++qrToken;                      // a slow answer for an earlier row must not fill a later one
+  qrUrl = "";
+  $("qrTitle").textContent = `${r.hotel_name} · ${CHANNEL_NAMES[r.OTA_name] || r.OTA_name}`;
+  $("qrBox").textContent = "Finding the page…"; $("qrUrl").textContent = "";
+  $("qrOpen").disabled = $("qrCopy").disabled = true; $("qrCopy").textContent = "Copy link";
+  $("qrGate").hidden = false;
+  try {
+    const res = await api("/api/app/link", { csv: $("appCsvPath").value, chain, key: r.key });
+    if (token !== qrToken) return;
+    qrUrl = res.url;
+    $("qrBox").innerHTML = res.svg; $("qrUrl").textContent = res.url;
+    $("qrOpen").disabled = $("qrCopy").disabled = false;
+  } catch (e) {
+    if (token !== qrToken) return;
+    $("qrBox").textContent = ""; $("qrUrl").textContent = e.message;
+  }
+}
+$("qrOpen").onclick = () => {
+  if (!qrUrl) return;
+  const win = window.open("about:blank", "mp_ota_page");   // the same window every time
+  if (!win) return alert("The window was blocked. Allow pop-ups for this page and try again.");
+  win.opener = null; win.location = qrUrl;
+};
+$("qrCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText(qrUrl); $("qrCopy").textContent = "Copied ✓"; }
+  catch (e) { alert("Could not copy. Select the link above and copy it."); }
+};
+$("qrClose").onclick = () => { $("qrGate").hidden = true; qrToken++; };
+$("qrGate").addEventListener("click", e => { if (e.target === $("qrGate")) $("qrClose").click(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("qrGate").hidden) $("qrClose").click(); });
+
+$("appPickBtn").onclick = async () => {
+  $("appPickBtn").disabled = true;
+  try { const r = await api("/api/pick", { kind: "results" }); if (!r.cancelled) await setAppCsv(r.path); } catch (e) { fail(e); }
+  $("appPickBtn").disabled = false;
+};
+$("appFollowBtn").onclick = () => {
+  if (!$("csvSelect").value) return alert("No file is chosen on the Upload tab");
+  setAppCsv($("csvSelect").value).catch(fail);
+};
+$("appRun").onclick = () => {
+  since = 0; $("appLog").textContent = ""; $("log").textContent = "";
+  api("/api/app/run", { csv: $("appCsvPath").value, chain }).catch(fail);
+};
+$("appStop").onclick = () => api("/api/stop", {}).catch(fail);
+
+function showTab(name) {
+  $("panelUpload").hidden = name !== "upload"; $("panelApp").hidden = name !== "app"; $("panelQa").hidden = name !== "qa";
+  for (const [id, tab] of [["tabUpload", "upload"], ["tabApp", "app"], ["tabQa", "qa"]]) $(id).classList.toggle("active", name === tab);
+  if (name === "app") loadApp().catch(fail);
+  if (name === "qa") (qaCsvValue() ? loadReview() : loadDashboardQa()).catch(() => {});
+}
+$("tabUpload").onclick = () => showTab("upload");
+$("tabApp").onclick = () => showTab("app");
+$("tabQa").onclick = () => showTab("qa");
+
+$("revCode").onclick = async () => {
+  const item = revItems[revIdx];
+  if (!item) return;
+  await copyText(plainCode(item.brand_code));
+  const el = $("revCode");
+  el.textContent = "Copied ✓"; el.classList.add("copied");
+  setTimeout(() => {                                   // back to the code, if still on the same issue
+    const now = revItems[revIdx];
+    if (now) { el.textContent = codeLabel(now); el.classList.remove("copied"); }
+  }, 1200);
+};
+let qaSkipFiles = [];
+const dashSlug = () => chain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+async function loadDashboardQa(force) {
+  // opens on today's confirmed issues for the chosen chain; coming back to the tab keeps the marks made so far
+  if (!chain) return;
+  const same = qaCsvValue().includes(`done_dashboard_${dashSlug()}_${new Date().toLocaleDateString("sv")}`);
+  if (same && !force) return;
+  $("qaCsv").textContent = "Reading the dashboard…";
+  try {
+    const r = await api("/api/qa/dashboard", { chain, skip: qaSkipFiles });
+    await setQaCsv(r.path, false);
+    $("qaSkipMsg").hidden = !qaSkipFiles.length;
+    $("qaSkipMsg").textContent = `Skipped ${r.skipped} already QAed (from ${qaSkipFiles.map(f => f.split("/").pop()).join(", ")}), ${r.count} to go.`;
+  } catch (e) { $("qaCsv").textContent = "none chosen"; $("revEmpty").textContent = e.message; }
+  updateQaReport();
+}
+$("qaDashBtn").onclick = () => loadDashboardQa(true).catch(fail);
+$("qaSkipBtn").onclick = async () => {
+  try {
+    const r = await api("/api/pick", { kind: "qacache" });
+    if (r.cancelled) return;
+    if (!qaSkipFiles.includes(r.path)) qaSkipFiles.push(r.path);
+    await loadDashboardQa(true);
+  } catch (e) { fail(e); }
+};
+
+$("revPrev").onclick = () => { revIdx--; renderReview(true); };
+$("revNext").onclick = () => { revIdx++; renderReview(true); };
+
+/* ---- screenshot viewer: click any screenshot to see it large, with the other screenshot of the same issue one arrow away ---- */
+let viewerShots = [], viewerAt = 0, viewerZoom = null;       // viewerZoom: null = fit the window, else a multiple of the image's own size
+function viewerShow() {
+  const shot = viewerShots[viewerAt], img = $("viewerImg");
+  img.src = shot.src; img.alt = shot.caption;
+  $("viewerTitle").textContent = shot.caption;
+  $("viewerPos").textContent = viewerShots.length > 1 ? `${viewerAt + 1} of ${viewerShots.length}` : "";
+  $("viewerPrev").disabled = $("viewerNext").disabled = viewerShots.length < 2;
+  viewerSetZoom(null);
+}
+function viewerSetZoom(z) {
+  viewerZoom = z;
+  const img = $("viewerImg");
+  img.classList.toggle("zoomed", z !== null);
+  img.style.width = z !== null && img.naturalWidth ? `${Math.round(img.naturalWidth * z)}px` : "";
+}
+function viewerStep(by) { viewerAt = (viewerAt + by + viewerShots.length) % viewerShots.length; viewerShow(); }
+function viewerFitScale() { const img = $("viewerImg"), st = $("viewerStage"); return img.naturalWidth ? Math.min(st.clientWidth / img.naturalWidth, st.clientHeight / img.naturalHeight, 1) : 1; }
+function viewerZoomBy(f) { viewerSetZoom(Math.min(Math.max((viewerZoom ?? viewerFitScale()) * f, 0.1), 6)); }
+function openViewer(box) {                                     // box: the .shots area the clicked screenshot sits in
+  viewerShots = [...box.querySelectorAll("figure")].map(f => ({ src: (f.querySelector("img") || {}).currentSrc || (f.querySelector("img") || {}).src, caption: (f.querySelector("figcaption") || {}).textContent || "Screenshot" }))
+    .filter(x => x.src && x.src !== location.href);
+  return viewerShots;
+}
+document.addEventListener("click", e => {
+  const img = e.target.closest(".imgbox img");
+  if (!img || !img.getAttribute("src")) return;
+  const box = img.closest(".shots") || img.closest("figure").parentElement;
+  const shots = openViewer(box);
+  viewerAt = Math.max(shots.findIndex(x => x.src === img.src), 0);
+  if (!shots.length) return;
+  $("viewer").hidden = false; viewerShow();
+});
+$("viewerPrev").onclick = () => viewerStep(-1);
+$("viewerNext").onclick = () => viewerStep(1);
+$("viewerIn").onclick = () => viewerZoomBy(1.25);
+$("viewerOut").onclick = () => viewerZoomBy(0.8);
+$("viewerFit").onclick = () => viewerSetZoom(null);
+$("viewerFull").onclick = () => viewerSetZoom(1);
+$("viewerWin").onclick = () => window.open($("viewerImg").src, "mp_shot", "noopener");
+$("viewerClose").onclick = () => { $("viewer").hidden = true; };
+$("viewerImg").onclick = () => viewerSetZoom(viewerZoom === null ? 1 : null);   // click the image to flip between fit and actual size
+$("viewer").addEventListener("click", e => { if (e.target === $("viewerStage") || e.target === $("viewer")) $("viewerClose").click(); });
+document.addEventListener("keydown", e => {
+  if ($("viewer").hidden) return;
+  const k = e.key;
+  if (k === "Escape") { $("viewerClose").click(); e.stopPropagation(); }
+  else if (k === "ArrowLeft" && viewerShots.length > 1) viewerStep(-1);
+  else if (k === "ArrowRight" && viewerShots.length > 1) viewerStep(1);
+  else if (k === "+" || k === "=") viewerZoomBy(1.25);
+  else if (k === "-") viewerZoomBy(0.8);
+  else if (k === "0") viewerSetZoom(null);
+  else if (k === "1") viewerSetZoom(1);
+}, true);
+
+$("revOpen").onclick = async () => {
+  const item = revItems[revIdx];
+  $("revOpen").disabled = true; $("revMsg").textContent = "Opening…";
+  try {
+    const res = await api("/api/review/open", { csv: qaCsvValue(), key: item.key });
+    revResults[item.key] = res;
+    showResultMsg(res);
+  } catch (e) { $("revMsg").textContent = e.message; $("revMsg").className = "hint problem"; }
+  $("revOpen").disabled = false;
+  renderTable();
+};
+
+// the issue's own values, as read from its page, for the QA report (dashboard issues have no entered values of their own)
+function issueValues(res) {
+  if (!res) return {};
+  const by = Object.fromEntries(res.checks.map(c => [c.field, c.actual]));
+  const text = v => v === null || v === undefined ? "" : typeof v === "boolean" ? (v ? "ticked" : "not ticked") : String(v);
+  return { platform: text(by["Channel platform"]), base_rate: text(by["Base rate"]), channel_rate: text(by["Channel rate"]),
+           base_cancellation: text(by["Base cancellation"]), channel_cancellation: text(by["Channel cancellation"]) };
+}
+
+async function markReview(status) {
+  const item = revItems[revIdx];
+  const found = revResults[item.key];
+  if (status === "ok") {                       // do not let an issue that was not read, or that does not match, pass by accident
+    const bad = found ? found.checks.filter(c => c.ok === false) : [];
+    if (!found || bad.length) {
+      const why = !found ? "The issue has not been read yet, so nothing was checked." :
+        "These fields do not match: " + bad.map(c => `${c.field} (expected ${fmt(c.expected)}, issue has ${fmt(c.actual)})`).join("; ") + ".";
+      if (!confirm(`${why}\n\nMark it OK anyway?`)) return;
+    }
+  }
+  const res = await api("/api/review/mark", { csv: qaCsvValue(), key: item.key, status, note: $("revNote").value,
+    check: checkSummary(revResults[item.key]), values: issueValues(found),
+    hotel: (revResults[item.key] && revResults[item.key].hotel_name) || item.hotel_name || "" });
+  item.review = status; item.note = $("revNote").value;
+  const next = revItems.findIndex((i, k) => k > revIdx && !i.review);   // on to the next unreviewed issue
+  if (next >= 0) revIdx = next;
+  renderReview(true);
+  if (res.completed_path) { $("qaDone").textContent = `QA complete. Results saved as ${res.completed_path}`; $("qaDone").hidden = false; }
+}
+$("revOk").onclick = () => markReview("ok").catch(fail);
+$("revBad").onclick = () => markReview("problem").catch(fail);
+
+/* ---- the run card: the issue being checked, its details as the form holds them, its screenshots, and Save ---- */
+const RUN_CARD = p => `
+  <div id="${p}Idle" class="hint" style="margin:0"></div>
+  <div id="${p}Card" hidden>
+    <div class="actions" style="margin:0 0 10px"><strong id="${p}Title"></strong><span class="spacer"></span><span id="${p}Phase" class="hint" style="margin:0"></span></div>
+    <table id="${p}Details"></table>
+    <div class="shots">
+      <figure><figcaption id="${p}CapBase"></figcaption><div class="imgbox"><img id="${p}ImgBase" alt="Base screenshot"></div></figure>
+      <figure><figcaption id="${p}CapChannel"></figcaption><div class="imgbox"><img id="${p}ImgChannel" alt="Channel screenshot"></div></figure>
+    </div>
+    <div id="${p}Msg" class="hint"></div>
+    <div class="actions">
+      <button class="primary" id="${p}Save" disabled>Save issue</button>
+      <button class="bad" id="${p}Decline" disabled title="This issue should not be raised. It is recorded as declined in the done file and does not come back">Decline</button>
+      <input type="text" id="${p}Note" placeholder="Reason for declining (optional)" style="flex:1;min-width:200px">
+      <button id="${p}Stop" disabled title="Stops the run after leaving this issue unsaved">Stop run</button>
+    </div>
+  </div>`;
+$("uRun").innerHTML = RUN_CARD("u");
+$("aRun").innerHTML = RUN_CARD("a");
+for (const p of ["u", "a"]) {
+  $(p + "Save").onclick = async () => {          // the server looks at the dashboard first and refuses a save that would break a limit
+    $(p + "Save").disabled = true; $(p + "Msg").className = "hint"; $(p + "Msg").textContent = "Checking the dashboard…";
+    try { await api("/api/run/save", {}); $(p + "Msg").textContent = ""; }
+    catch (e) { $(p + "Msg").textContent = e.message; $(p + "Msg").className = "hint problem"; $(p + "Save").disabled = false; }
+  };
+  $(p + "Decline").onclick = () => {
+    api("/api/send", { text: "d:" + $(p + "Note").value.replace(/\s+/g, " ").trim() }).then(() => { $(p + "Note").value = ""; }).catch(fail);
+  };
+  $(p + "Stop").onclick = () => api("/api/send", { text: "q" }).catch(fail);
+}
+
+const PHASES = { filling: "Filling the form…", ready: "Ready: check it, then save", saving: "Saving…", saved: "Saved ✓",
+                 skipped: "Skipped", declined: "Declined", error: "Parity Manager did not accept it" };
+const tick = v => v === null || v === undefined ? "–" : v ? "ticked" : "not ticked";
+const fileText = f => f ? `${f.name} (${Math.max(Math.round(f.size / 1024), 1)} KB)` : "none attached";
+
+function runRows(state) {                      // [label, what the form holds, whether it matches what was meant (true/false/null)]
+  const v = state.values, e = state.expected;
+  if (!v) return [];
+  const rate = (a, b) => a !== "" && Math.abs(parseFloat(a) - parseFloat(b)) < 0.005;
+  const flag = (a, b) => b === null ? null : a === b;
+  return [["Base rate", v.base_rate, rate(v.base_rate, e.base_rate)],
+          ["Channel rate", v.channel_rate, rate(v.channel_rate, e.channel_rate)],
+          ["Base cancellation", tick(v.base_cancellation), flag(v.base_cancellation, e.base_cancellation)],
+          ["Channel cancellation", tick(v.channel_cancellation), flag(v.channel_cancellation, e.channel_cancellation)],
+          ["Channel", v.channel, null], ["Channel platform", v.platform, v.platform === e.platform],
+          ["Base screenshot", fileText(v.base_file), !!v.base_file], ["Channel screenshot", fileText(v.channel_file), !!v.channel_file]];
+}
+
+const runSeen = { u: "", a: "", ui: "", ai: "" };
+function renderRun(state, running) {
+  for (const p of ["u", "a"]) {
+    const show = running && state;
+    $(p + "Card").hidden = !show; $(p + "Idle").hidden = !!show;
+    $(p + "Idle").textContent = running ? "Starting…" : "Each issue appears here to check once its form is filled.";
+    if (!show) { runSeen[p] = runSeen[p + "i"] = ""; continue; }
+    const app = state.platform === "app";
+    $(p + "Title").textContent = `Issue ${state.n} of ${state.total} · ${state.hotel} · ${CHANNEL_NAMES[state.channel] || state.channel}${app ? " · Mobile App" : ""}`;
+    $(p + "Phase").textContent = PHASES[state.phase] || state.phase;
+    const sig = JSON.stringify([state.n, state.phase, state.values, state.message]);
+    if (sig !== runSeen[p]) {                    // rebuild only when something changed, so the page does not flicker
+      runSeen[p] = sig;
+      const table = $(p + "Details"); table.textContent = "";
+      const rows = runRows(state);
+      if (rows.length) {
+        const head = table.createTHead().insertRow();
+        for (const h of ["Field", "As filled in the form", ""]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+        const body = table.createTBody();
+        for (const [label, value, ok] of rows) {
+          const tr = body.insertRow();
+          tr.insertCell().textContent = label; tr.insertCell().textContent = value === null ? "–" : value;
+          const mark = tr.insertCell(); mark.textContent = ok === null ? "" : ok ? "✓" : "✗"; mark.className = ok === null ? "" : ok ? "good" : "problem";
+        }
+      }
+      $(p + "Msg").textContent = state.message || (state.problems && state.problems.length ? state.problems.join("; ") : "");
+      $(p + "Msg").className = "hint " + (state.phase === "error" ? "problem" : "");
+    }
+    const imgKey = `${state.n}|${state.channel}`;
+    if (imgKey !== runSeen[p + "i"]) {           // the two screenshots being uploaded for this issue
+      runSeen[p + "i"] = imgKey;
+      document.querySelectorAll(`#${p}Card .imgbox`).forEach(b => { b.scrollTop = 0; });   // each new issue starts at the top of its screenshots
+      $(p + "ImgBase").src = `/api/run/image?which=base&n=${state.n}`; $(p + "ImgChannel").src = `/api/run/image?which=channel&n=${state.n}`;
+      $(p + "CapBase").textContent = "Brand.com screenshot (base)";
+      $(p + "CapChannel").textContent = app ? "Phone screenshot (channel)" : "Channel screenshot";
+    }
+    const canAct = state.phase === "ready" || state.phase === "error";
+    $(p + "Save").disabled = !canAct; $(p + "Decline").disabled = !canAct; $(p + "Note").disabled = !canAct; $(p + "Stop").disabled = !running;
+  }
+}
+
+/* ---- run ---- */
+$("chromeBtn").onclick = () => api("/api/chrome", {}).catch(fail);
+const screenArea = () => ({ left: screen.availLeft || 0, top: screen.availTop || 0, width: screen.availWidth, height: screen.availHeight });
+$("arrangeBtn").onclick = () => api("/api/arrange", screenArea()).catch(fail);
+$("runBtn").onclick = () => {
+  const csv = $("csvSelect").value;
+  if (!csv) return alert("No results CSV selected");
+  since = 0; $("log").textContent = "";
+  api("/api/run", { csv, chain, dry_run: $("dryRun").checked, limit: $("limit").value })
+    .catch(fail);
+};
+$("quitAppBtn").onclick = () => {
+  if (!confirm("Stop the tool server?")) return;
+  api("/api/quit", {}).then(() => {
+    clearInterval(pollTimer);                   // the server is gone, stop asking it for status
+    document.body.innerHTML = "<p style='padding:40px'>Stopped. You can close this window.</p>";
+    window.close();                             // works when Chrome opened this window as the tool's app window
+  }).catch(fail);
+};
+$("stopBtn").onclick = () => api("/api/stop", {}).catch(fail);
+
+async function poll() {
+  try {
+    const s = await api("/api/status?since=" + since);
+    since = s.total;
+    if (s.lines.length) {
+      const el = $("log"), atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+      el.textContent += s.lines.join("\n") + "\n";
+      if (atEnd) el.scrollTop = el.scrollHeight;
+      $("appLog").textContent += s.lines.join("\n") + "\n"; $("appLog").scrollTop = $("appLog").scrollHeight;   // the same run shows on both tabs
+    }
+    $("chromeDot").classList.toggle("on", s.chrome);
+    $("chromeText").textContent = s.chrome ? "running" : "not running";
+    $("runBtn").disabled = s.running;
+    for (const id of ["stopBtn", "appStop"]) $(id).disabled = !s.running;
+    renderRun(s.state, s.running);
+    $("runState").textContent = $("appRunState").textContent = s.running ? "Running…" : "";
+    if (s.running) $("appRun").disabled = true;
+    if ((wasRunning && !s.running) || (s.running && Date.now() - lastCountPoll > 2000)) {   // keep the saved count live during and just after a run
+      lastCountPoll = Date.now(); refreshLimits(wasRunning && !s.running).catch(() => {});
+      if (wasRunning && !s.running && !$("panelApp").hidden) loadApp().catch(() => {});   // saved hotels drop off the list
+      if (!s.running || !$("revCard").hidden || !revItems.length) loadReview().catch(() => {});
+    }
+    wasRunning = s.running;
+  } catch (e) { if ($("runState")) $("runState").textContent = "Server not reachable"; }
+}
+
+
+showTab("upload");                       // the app always opens on the Upload tab
+
+// Parity Manager sign-in comes first: the page waits here until the tool's Chrome is signed in
+let checkingLogin = false, gateTimer = null;
+async function checkLogin() {
+  if (checkingLogin) return;
+  checkingLogin = true;
+  try {
+    const s = await api("/api/pm/status");
+    if (s.signed_in) return closeGate();
+    $("gateMsg").textContent = !s.chrome
+      ? "The tool's Chrome isn't open yet. Open the login window, then sign in to Parity Manager there."
+      : s.error ? `${s.error}. Sign in to Parity Manager in the tool's Chrome, then check again.`
+      : "Sign in to Parity Manager in the tool's Chrome window. This page continues by itself once you are signed in.";
+  } catch (e) {
+    $("gateMsg").textContent = "Couldn't check the sign-in: " + e.message;
+  } finally { checkingLogin = false; }
+}
+function closeGate() { $("loginGate").hidden = true; clearInterval(gateTimer); openChainGate().catch(fail); }   // the chain comes next
+$("gateOpen").onclick = () => api("/api/chrome", {}).catch(fail);
+$("gateCheck").onclick = () => { $("gateMsg").textContent = "Checking…"; checkLogin(); };
+$("gateSkip").onclick = closeGate;
+checkLogin();
+gateTimer = setInterval(checkLogin, 4000);
+settingsReady = loadSettings();
+
+/* ---- updates: look for a newer release once at start, offer it, and show what changed after an update ---- */
+async function checkUpdates() {
+  const notes = await api("/api/update/notes");                  // an update was installed and the app restarted into it
+  if (notes.version) {
+    $("updNotesTitle").textContent = `Updated to v${notes.version}`;
+    $("updNotesBody").textContent = notes.notes || "No release notes were written for this version.";
+    $("updNotes").hidden = false;
+  }
+  const r = await api("/api/update/check");
+  if (!r.available) return;
+  $("updText").textContent = `Version ${r.latest} is available (you have ${r.current}).`;
+  $("updBanner").hidden = false;
+  $("updBanner").dataset.notes = r.notes || "";
+}
+$("updNotesOk").onclick = () => { $("updNotes").hidden = true; api("/api/update/dismiss", {}).catch(() => {}); };
+$("updLater").onclick = () => { $("updBanner").hidden = true; };
+$("updInstall").onclick = async () => {
+  $("updInstall").disabled = true; $("updText").textContent = "Downloading and installing…";
+  try {
+    const r = await api("/api/update/install", {});
+    $("updText").textContent = `Version ${r.version} is installed. Close the tool window and open the app again to use it.`;
+    $("updInstall").hidden = true; $("updLater").hidden = true;
+  } catch (e) { $("updText").textContent = e.message; $("updInstall").disabled = false; }
+};
+checkUpdates().catch(() => {});                                 // no internet or no releases yet: carry on quietly
+poll();
+const pollTimer = setInterval(poll, 700);
+setInterval(() => refreshLimits().catch(() => {}), 10000);      // the totals follow the dashboard
+</script>
+</body>
+</html>
