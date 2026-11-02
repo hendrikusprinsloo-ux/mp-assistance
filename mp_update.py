@@ -58,9 +58,10 @@ def expected_sha256(release, asset):
     return None
 
 
-def check(current, repo=None, opener=fetch):
+def check(current, repo=None, opener=None):
     """What the latest release is: {current, latest, available, notes, url, name, release} or {error}."""
     repo = REPO if repo is None else repo
+    opener = opener or fetch
     if not repo:
         return {"current": current, "available": False, "disabled": True}
     try:
@@ -117,10 +118,40 @@ def apply_zip(data, here, version, notes="", sha256=None):
     return changed
 
 
-def install(release_info, here, opener=fetch):
+def install(release_info, here, opener=None):
+    opener = opener or fetch
     asset = release_info["asset"]
     data = opener(asset["browser_download_url"], MAX_ZIP)
     return apply_zip(data, here, release_info["latest"], release_info.get("notes", ""), expected_sha256(release_info["release"], asset))
+
+
+def auto_update(here, current, quiet=False):
+    """Run at launch, before the server starts: install a newer release if there is one, so the app opens on the new code.
+    Anything that goes wrong (no internet, no release, a bad checksum) is reported in a line and the current version carries on."""
+    say = (lambda *a: None) if quiet else print
+    info = check(current)
+    if info.get("disabled") or info.get("error"):
+        say(info.get("error", ""))
+        return False
+    if not info["available"]:
+        return False
+    say(f"Updating MP Assistance {current} -> {info['latest']} ...")
+    try:
+        changed = install(info, here)
+    except Exception as e:
+        say(f"Update skipped, carrying on with {current}: {str(e).splitlines()[0][:160]}")
+        return False
+    say(f"Updated to {info['latest']} ({len(changed)} files).")
+    return True
+
+
+def main():
+    here = Path(__file__).resolve().parent
+    try:
+        current = (here / "VERSION").read_text().strip()
+    except OSError:
+        return
+    auto_update(here, current)
 
 
 def pending_notes(here, current):
@@ -135,3 +166,7 @@ def pending_notes(here, current):
 
 def dismiss_notes(here):
     (Path(here) / ".update_done.json").unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    main()

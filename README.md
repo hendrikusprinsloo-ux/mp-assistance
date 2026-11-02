@@ -2,7 +2,7 @@
 
 Fills Parity Manager "Add Mobile Parity Issue" forms from the parity scraper `results_*.csv`, attaches the
 screenshots, and lets you check and save each issue from the app. It also raises Mobile App issues (Choice) from your phone
-screenshots, and has a QA tab to check what was saved. Version 1.7 (see `VERSION`, also shown in the page header).
+screenshots, and has a QA tab to check what was saved. Version 1.8 (see `VERSION`, also shown in the page header).
 
 A results file made on another computer works too: its screenshot paths point at that computer, so the tool looks for the same
 file names in the folder next to the CSV. Keep the CSV and its screenshots together.
@@ -160,7 +160,9 @@ cd ~/Downloads && curl -L -o mp.zip "https://github.com/hendrikusprinsloo-ux/mp-
 (Attach the zip to each release under the fixed name `MP-Assistance.zip` as well as its versioned name, so this address never changes.)
 If a zip was downloaded in a browser instead, remove the mark first: `xattr -dr com.apple.quarantine "MP Upload tool"`.
 
-**Updating:** on start the app asks GitHub for the latest release. If it is newer, a banner offers **Update now**. The zip is downloaded by Python
+**Updating:** every time the app is opened, `start.command` first runs `mp_update.py`, which asks GitHub for the latest release and, if it is newer,
+installs it before the app starts (skipped with no internet). A banner with **Update now** also covers an app left open for days. Before 1.8
+only the banner existed, so a 1.7 install updates once with the banner and from then on at launch. The zip is downloaded by Python
 (so it is not quarantined), checked against its SHA-256 checksum, and only code files are replaced; settings, the ledger, QA files and `.venv`
 are kept, and replaced files are copied to `.update_backup/` first. Restart the app to use it; the next start shows the release notes.
 It needs the internet; without it the app carries on as normal.
