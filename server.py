@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1197,8 +1198,19 @@ def stop_run():
     return {"ok": True}, 200
 
 
+def close_tool_chrome():
+    """Quit the tool's own Chrome (the one using its profile folder; the user's everyday Chrome is a different process and is left alone).
+    The sign-in stays in the profile, so the next start is still signed in."""
+    try:
+        subprocess.run(["pkill", "-TERM", "-f", f"--user-data-dir={CHROME_PROFILE}"], timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def quit_app():
     stop_run()
+    close_tool_chrome()
     shutil.rmtree(GEO_DIR, ignore_errors=True)
     threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
     return {"ok": True}, 200
@@ -1345,8 +1357,12 @@ if __name__ == "__main__":
     if "--with-chrome" in sys.argv:  # app mode: open the tool's Chrome windows, quit when the tool window closes
         threading.Thread(target=open_windows, daemon=True).start()
         threading.Thread(target=watch_window, daemon=True).start()
+    for sig in (signal.SIGTERM, signal.SIGHUP):          # a closed Terminal or `kill` ends the app the same way as Ctrl+C
+        signal.signal(sig, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
+        print("\nStopping: closing the tool's Chrome and any run in progress.")
         stop_run()
+        close_tool_chrome()
         shutil.rmtree(GEO_DIR, ignore_errors=True)
