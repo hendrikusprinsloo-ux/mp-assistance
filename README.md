@@ -1,2 +1,0 @@
-# mp-assistance
-MP assistance
