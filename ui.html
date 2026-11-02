@@ -221,6 +221,7 @@
       <span id="csvName" class="hint" style="margin:0;word-break:break-all">No file chosen</span>
     </div>
     <input type="hidden" id="csvSelect">
+    <div id="ratesNote" class="hint" style="margin:6px 0 0" hidden></div>
     <div class="row">
       <label><input type="checkbox" id="dryRun"> Dry run (preview only)</label>
       <label>Limit rows <input type="number" id="limit" min="1" placeholder="all remaining"></label>
@@ -396,9 +397,24 @@ function renderCsvName() {
   $("csvName").title = path;
 }
 
+async function checkRates(path) {
+  const note = $("ratesNote"); note.hidden = true;
+  if (!path) return;
+  let r; try { r = await api("/api/rates/check?csv=" + enc(path)); } catch (e) { return; }
+  if ($("csvSelect").value !== path || r.error) return;                      // moved on to another file meanwhile
+  const names = r.would_confirm.map(c => `${c.hotel} (${c.channel}, ${c.file_diff} → ${c.new_diff})`);
+  const lost = (r.no_longer || []).map(c => `${c.hotel} (${c.channel})`);
+  if (!names.length && !lost.length) return;
+  note.hidden = false; note.className = "hint problem";
+  note.textContent = (names.length ? `${names.length} row${names.length === 1 ? "" : "s"} the file calls not an issue ${names.length === 1 ? "is" : "are"} more than 2 below brand once the cents are counted: ${names.join("; ")}. ` : "")
+    + (lost.length ? `${lost.length} row${lost.length === 1 ? "" : "s"} the file calls an issue ${lost.length === 1 ? "is" : "are"} 2 or less below brand once the cents are counted: ${lost.join("; ")}. ` : "")
+    + "A warning only: runs follow the file's own labels.";
+}
+
 function setCsv(path) {
   $("csvSelect").value = path;
   renderCsvName();
+  checkRates(path);
 }
 $("pickBtn").onclick = async () => {
   $("pickBtn").disabled = true; $("csvName").textContent = "Waiting for the file dialog…";

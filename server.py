@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urljoin, urlparse, urlsplit
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
+import mp_rates  # noqa: E402
 import mp_review  # noqa: E402
 import mp_update  # noqa: E402
 import mp_upload  # noqa: E402  (its playwright import is lazy, so this is cheap)
@@ -778,6 +779,21 @@ def app_eligible(csv_path, chain):
     return {"allowed": True, "rows": rows, "skipped": skipped, "done_file": done_info, **limits_for(chain)}
 
 
+def rates_check(csv_path):
+    """Rows whose label in the results file differs from the one worked out again from the raw rate texts, with the ones that
+    would become confirmed issues listed first. A warning only: runs still use the file's own label."""
+    if csv_path is None:
+        return {"rows": 0, "changed": [], "would_confirm": []}
+    try:
+        res = mp_rates.audit(csv_path)
+    except (OSError, csv.Error, KeyError) as e:
+        return {"error": f"Could not check the rates: {e}", "rows": 0, "changed": [], "would_confirm": []}
+    pick = lambda c: {"hotel": c[0], "channel": c[1], "file_label": c[2], "new_label": c[3], "file_diff": c[4], "new_diff": c[5]}
+    would = [pick(c) for c in res["changed"] if c[3] == "lower_than_brand" and c[2] != "lower_than_brand"]
+    return {"rows": res["rows"], "same": res["same"], "changed": len(res["changed"]), "would_confirm": would,
+            "no_longer": [pick(c) for c in res["changed"] if c[2] == "lower_than_brand" and c[3] != "lower_than_brand"]}
+
+
 def app_row(opts):
     """(csv path, eligible row) for a request about one Mobile App row, or an error reply."""
     csv_path = results_csv(str(opts.get("csv", "")))
@@ -1260,6 +1276,9 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/limits":
             chain = parse_qs(url.query).get("chain", [""])[0]
             return self.reply(limits_for(chain if chain in CHAINS else current_chain(), fresh="fresh" in parse_qs(url.query)))
+        if url.path == "/api/rates/check":
+            csv_path = results_csv(parse_qs(url.query).get("csv", [""])[0])
+            return self.reply(rates_check(csv_path))
         if url.path == "/api/app/eligible":
             q = parse_qs(url.query)
             csv_path = results_csv(q.get("csv", [""])[0])

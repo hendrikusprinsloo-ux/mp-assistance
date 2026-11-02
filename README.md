@@ -2,7 +2,7 @@
 
 Fills Parity Manager "Add Mobile Parity Issue" forms from the parity scraper `results_*.csv`, attaches the
 screenshots, and lets you check and save each issue from the app. It also raises Mobile App issues (Choice) from your phone
-screenshots, and has a QA tab to check what was saved. Version 1.8.3 (see `VERSION`, also shown in the page header).
+screenshots, and has a QA tab to check what was saved. Version 1.9.0-nightly (see `VERSION`, also shown in the page header).
 
 A results file made on another computer works too: its screenshot paths point at that computer, so the tool looks for the same
 file names in the folder next to the CSV. Keep the CSV and its screenshots together.
@@ -147,6 +147,24 @@ Checks issues one at a time and produces the QA results file.
   issues remain (unmarked ones show "Pending"), and it becomes `COMPLETED_qa_<name>.csv` once every issue is marked. **Download QA
   report** unlocks at that point. Each row has the entered values, the issue link, the field check, your result and note.
 - Issues saved before issue ids were recorded can be marked, but not opened or have screenshots loaded.
+
+## Nightly (branch `nightly`): scraper rebuild, untested
+
+This branch is a work-in-progress of bringing the Mobile Parity Automation scraper (the tool that produces the results file) into this
+app. Its source was not available, so only its structure was recovered; **nothing from its bundle, including the Google Drive key,
+is copied here**. Treat everything in this section as untested against the live sites.
+
+- `mp_rates.py`: reads a rate from page text and labels it as the results file does (a channel rate more than 2 below brand is
+  `lower_than_brand`). Keeps the cents on brand.com rates, takes the lowest of several OTA prices, falls back to the input's brand rate when
+  there is no live one, recognises more currencies and spots sold-out wording. Checked against two real results files.
+- **Upload tab warning:** choosing a results file lists rows the file calls "not an issue" that are more than 2 below brand once the cents
+  are counted (`/api/rates/check`). A warning only: runs follow the file's own labels.
+- `mp_pricelines.py`: a first single-site reader for Priceline. It opens one results row's link in the tool's Chrome and prints the rate it
+  reads (`python mp_pricelines.py results.csv [--row N] [--save-page FOLDER]`). **It has not yet completed a run on the live page**; its first
+  trial crashed on empty page elements (fixed) and the next result was not seen. Expedia, Booking.com and the brand.com sites are not built.
+- Tests: `.venv/bin/python -m unittest discover -s tests` (no network or Chrome needed).
+- `VERSION` is `1.9.0-nightly`, which the updater does not read as a release number, so a nightly install is never offered an update and a
+  stable install is never switched to a nightly.
 
 ## Installing and updating
 
