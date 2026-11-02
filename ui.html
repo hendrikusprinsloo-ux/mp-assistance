@@ -106,6 +106,17 @@
 </style>
 </head>
 <body>
+<div id="updGate" class="gate" style="z-index:55">
+  <div class="gate-card" style="min-width:420px;max-width:560px">
+    <h2 id="updTitle">Checking for updates…</h2>
+    <p id="updMsg" style="margin:0 0 6px">Looking for a newer version of MP Assistance.</p>
+    <pre id="updNotesPreview" hidden style="white-space:pre-wrap;font:13px/1.5 inherit;max-height:40vh;overflow:auto;margin:10px 0"></pre>
+    <div class="actions" id="updActions" hidden>
+      <button class="primary" id="updInstall">Update now</button>
+      <button id="updLater">Later</button>
+    </div>
+  </div>
+</div>
 <div id="loginGate" class="gate">
   <div class="gate-card">
     <h2>Sign in to Parity Manager</h2>
@@ -173,11 +184,6 @@
 <main>
   <div class="actions" style="margin:0 0 18px"><h1>MP Assistance</h1><span class="hint" id="versionTag" style="margin:0 0 0 8px"></span><span class="spacer"></span><span class="btn-group"><button id="chainBtn" title="Change the chain or its limits">Chain</button><button id="dashBtn" disabled title="Choose a chain first">–</button></span><button id="ignoreBtn" title="Let runs and saves go past the daily limits (for a demo). Starts off every time the app starts.">Ignore limits: off</button><button id="themeBtn" title="Switch between dark and light mode"></button><button id="quitAppBtn">Quit app</button></div>
 
-  <div id="updBanner" class="banner" hidden style="border-color:var(--accent);background:rgba(236,71,10,.10);color:var(--ink)">
-    <span id="updText"></span>
-    <button class="primary" id="updInstall">Update now</button>
-    <button id="updLater">Later</button>
-  </div>
   <div id="updNotes" class="gate" hidden>
     <div class="gate-card" style="min-width:420px;max-width:560px">
       <h2 id="updNotesTitle">Updated</h2>
@@ -1181,31 +1187,41 @@ checkLogin();
 gateTimer = setInterval(checkLogin, 4000);
 settingsReady = loadSettings();
 
-/* ---- updates: look for a newer release once at start, offer it, and show what changed after an update ---- */
+/* ---- updates: the first thing on screen is a check for a newer release; it clears itself when there is nothing to do ---- */
+const plainNotes = t => String(t || "").replace(/^#{1,6}\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/^[-*]\s+/gm, "• ");
+const updDone = () => { $("updGate").hidden = true; };
 async function checkUpdates() {
-  const notes = await api("/api/update/notes");                  // an update was installed and the app restarted into it
+  const notes = await api("/api/update/notes").catch(() => ({}));   // an update was installed and the app restarted into it
   if (notes.version) {
     $("updNotesTitle").textContent = `Updated to v${notes.version}`;
-    $("updNotesBody").textContent = notes.notes || "No release notes were written for this version.";
-    $("updNotes").hidden = false;
+    $("updNotesBody").textContent = plainNotes(notes.notes) || "No release notes were written for this version.";
+    $("updNotes").hidden = false;                                    // sits above the other screens until it is dismissed
   }
-  const r = await api("/api/update/check");
-  if (!r.available) return;
-  $("updText").textContent = `Version ${r.latest} is available (you have ${r.current}).`;
-  $("updBanner").hidden = false;
-  $("updBanner").dataset.notes = r.notes || "";
+  let r = null;
+  try { r = await Promise.race([api("/api/update/check"), new Promise((_, no) => setTimeout(() => no(new Error("It took too long")), 8000))]); }
+  catch (e) { r = { error: e.message }; }
+  if (r.available) {
+    $("updTitle").textContent = `Version ${r.latest} is available`;
+    $("updMsg").textContent = `You have ${r.current}.`;
+    if (r.notes) { $("updNotesPreview").textContent = plainNotes(r.notes); $("updNotesPreview").hidden = false; }
+    $("updActions").hidden = false;
+    return;                                                          // waits for Update now / Later
+  }
+  if (r.error) { $("updTitle").textContent = "Could not check for updates"; $("updMsg").textContent = r.error; setTimeout(updDone, 2500); return; }
+  updDone();                                                         // up to date (or the check is switched off): straight on
 }
 $("updNotesOk").onclick = () => { $("updNotes").hidden = true; api("/api/update/dismiss", {}).catch(() => {}); };
-$("updLater").onclick = () => { $("updBanner").hidden = true; };
+$("updLater").onclick = updDone;
 $("updInstall").onclick = async () => {
-  $("updInstall").disabled = true; $("updText").textContent = "Downloading and installing…";
+  $("updInstall").disabled = true; $("updLater").disabled = true; $("updMsg").textContent = "Downloading and installing…";
   try {
     const r = await api("/api/update/install", {});
-    $("updText").textContent = `Version ${r.version} is installed. Close the tool window and open the app again to use it.`;
-    $("updInstall").hidden = true; $("updLater").hidden = true;
-  } catch (e) { $("updText").textContent = e.message; $("updInstall").disabled = false; }
+    $("updTitle").textContent = `Version ${r.version} is installed`;
+    $("updMsg").textContent = "Close the tool window and open the app again to use it.";
+    $("updNotesPreview").hidden = true; $("updActions").hidden = true;
+  } catch (e) { $("updMsg").textContent = e.message; $("updInstall").disabled = false; $("updLater").disabled = false; }
 };
-checkUpdates().catch(() => {});                                 // no internet or no releases yet: carry on quietly
+checkUpdates().catch(updDone);                                      // whatever goes wrong, never trap the user on this screen
 poll();
 const pollTimer = setInterval(poll, 700);
 setInterval(() => refreshLimits().catch(() => {}), 10000);      // the totals follow the dashboard
