@@ -1291,6 +1291,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(body, status)
         if url.path == "/api/review/items":
             return self.reply({"items": review_items(parse_qs(url.query).get("csv", [""])[0])})
+        if url.path == "/api/csv/exists":      # lets the page restore the file it had chosen before a reload
+            return self.reply({"exists": results_csv(parse_qs(url.query).get("csv", [""])[0]) is not None})
         if url.path == "/api/update/check":
             body, status = update_check()
             return self.reply(body, status)

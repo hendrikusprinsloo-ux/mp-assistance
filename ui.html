@@ -413,8 +413,18 @@ async function checkRates(path) {
 
 function setCsv(path) {
   $("csvSelect").value = path;
+  try { localStorage.setItem("mpCsv", path); } catch (e) { /* storage off: the file is just not remembered */ }
   renderCsvName();
   checkRates(path);
+}
+// The chosen file is remembered, so a reload of the page (or a second tool window) does not leave the Upload tab empty
+async function restoreCsv() {
+  let saved = ""; try { saved = localStorage.getItem("mpCsv") || ""; } catch (e) { return; }
+  if (!saved || $("csvSelect").value) return;
+  try {
+    if (!(await api("/api/csv/exists?csv=" + enc(saved))).exists) { localStorage.removeItem("mpCsv"); return; }   // moved or deleted since
+  } catch (e) { return; }
+  if (!$("csvSelect").value) setCsv(saved);
 }
 $("pickBtn").onclick = async () => {
   $("pickBtn").disabled = true; $("csvName").textContent = "Waiting for the file dialog…";
@@ -1202,6 +1212,7 @@ $("gateSkip").onclick = closeGate;
 checkLogin();
 gateTimer = setInterval(checkLogin, 4000);
 settingsReady = loadSettings();
+restoreCsv();
 
 /* ---- updates: the first thing on screen is a check for a newer release; it clears itself when there is nothing to do ---- */
 const plainNotes = t => String(t || "").replace(/^#{1,6}\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/^[-*]\s+/gm, "• ");
