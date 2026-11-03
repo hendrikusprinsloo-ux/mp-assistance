@@ -35,6 +35,12 @@
   section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
   h2 { font-size: 13px; font-weight: 600; color: var(--important); background: var(--band); border-radius: 6px;
        padding: 9px 12px; margin: 0 0 14px; }
+  /* sections fold up under their heading; the choice is remembered */
+  .fold > h2 { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px; }
+  .fold > h2::before { content: "▾"; font-size: 12px; opacity: .7; transition: transform .15s; }
+  .fold.collapsed > h2 { margin-bottom: 0; }
+  .fold.collapsed > h2::before { transform: rotate(-90deg); }
+  .fold.collapsed > :not(h2) { display: none; }
   label { display: block; margin: 8px 0 4px; font-weight: 600; color: var(--important); }
   select, input[type=text], input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px;
        font: inherit; background: var(--bg); color: var(--ink); }
@@ -207,7 +213,7 @@
   <div class="layout">
   <div>
   <section>
-    <h2>1. Chrome</h2>
+    <h2>1. Chrome <span id="chromeSummary" class="hint" style="margin:0;font-weight:400"></span></h2>
     <button id="chromeBtn">Open Chrome for the tool</button>
     <button id="arrangeBtn" title="Tool window on the left half of this screen, Parity Manager on the right half">Arrange windows</button>
     <span style="margin-left:12px"><span class="dot" id="chromeDot"></span><span id="chromeText">not running</span></span>
@@ -221,6 +227,11 @@
       <span id="csvName" class="hint" style="margin:0;word-break:break-all">No file chosen</span>
     </div>
     <input type="hidden" id="csvSelect">
+    <div class="actions" style="margin:8px 0 0">
+      <button id="folderBtn" title="The folder that holds your run folders (for example parity_scraper_screenshots). The newest results file in it is loaded each time the app starts">Set default runs folder…</button>
+      <button id="latestBtn" title="Load the newest results file from the default folder" disabled>Load latest results</button>
+      <span id="folderName" class="hint" style="margin:0;word-break:break-all">No default folder: choose a file above</span>
+    </div>
     <div class="row">
       <label><input type="checkbox" id="dryRun"> Dry run (preview only)</label>
       <label>Limit rows <input type="number" id="limit" min="1" placeholder="all remaining"></label>
@@ -237,7 +248,7 @@
     </details>
   </section>
 
-  <section>
+  <section id="uRunSection">
     <h2>3. Run</h2>
     <div id="uRun"></div>
   </section>
@@ -283,7 +294,7 @@
     </div>
   </section>
 
-  <section>
+  <section id="aRunSection">
     <h2>3. Run</h2>
     <div id="aRun"></div>
   </section>
@@ -356,6 +367,7 @@
 const $ = id => document.getElementById(id);
 let since = 0;
 let wasRunning = false, lastCountPoll = 0;
+let runsFolder = "", serverStart = 0;
 let chains = [], savedChain = "", appChain = "", sfAccounts = {}, chain = "", limits = null, popupLimits = null, settingsReady = null;
 let revItems = [], revIdx = 0, revResults = {}, revCsv = "", shownKey = "";
 const qaCsvValue = () => $("qaCsvPath").value;     // the QA tab's own file; the Upload tab keeps #csvSelect
@@ -401,6 +413,39 @@ function setCsv(path) {
   try { localStorage.setItem("mpCsv", path); } catch (e) { /* storage off: the file is just not remembered */ }
   renderCsvName();
 }
+/* ---- default runs folder: on a fresh start of the app the newest results file in it is loaded; a page reload keeps the file in use ---- */
+function renderFolder(run) {
+  $("latestBtn").disabled = !runsFolder;
+  $("folderName").textContent = runsFolder
+    ? `Default folder: ${runsFolder.split("/").slice(-2).join(" / ")}${run ? ` · latest: ${run}` : ""}`
+    : "No default folder: choose a file above";
+  $("folderName").title = runsFolder;
+}
+async function loadLatest(quiet) {
+  let r; try { r = await api("/api/runs/latest"); } catch (e) { if (!quiet) fail(e); return false; }
+  runsFolder = r.folder; renderFolder(r.run);
+  if (r.error) { $("folderName").textContent = r.error; $("folderName").classList.add("problem"); if (!quiet) alert(r.error); return false; }
+  $("folderName").classList.remove("problem");
+  if (!r.latest) { if (!quiet) alert("No results file was found in that folder."); return false; }
+  setCsv(r.latest); return true;
+}
+async function startupCsv() {
+  await settingsReady;
+  renderFolder();
+  const fresh = (() => { try { return localStorage.getItem("mpStart") !== String(serverStart); } catch (e) { return true; } })();
+  try { localStorage.setItem("mpStart", String(serverStart)); } catch (e) { /* not remembered */ }
+  if (runsFolder && fresh && !$("csvSelect").value && await loadLatest(true)) return;
+  await restoreCsv();
+}
+$("folderBtn").onclick = async () => {
+  try {
+    const r = await api("/api/pick", { kind: "folder" });
+    if (r.cancelled) return;
+    await api("/api/runs/folder", { folder: r.path });
+    await loadLatest(false);
+  } catch (e) { fail(e); }
+};
+$("latestBtn").onclick = () => loadLatest(false);
 // The chosen file is remembered, so a reload of the page (or a second tool window) does not leave the Upload tab empty
 async function restoreCsv() {
   let saved = ""; try { saved = localStorage.getItem("mpCsv") || ""; } catch (e) { return; }
@@ -423,6 +468,7 @@ async function loadSettings() {
   const s = await api("/api/settings");
   chains = s.chains; savedChain = s.chain; appChain = s.app_chain; sfAccounts = s.sf_accounts;
   $("versionTag").textContent = s.version ? "v" + s.version : "";
+  runsFolder = s.runs_folder || ""; serverStart = s.started || 0;
   applyTheme(s.theme);
   // windows are only arranged when the user clicks Arrange windows
 }
@@ -751,7 +797,35 @@ async function loadApp() {
 
 function appReady() { return appData ? appData.rows.filter(r => r.shot && r.rate) : []; }
 
-function renderApp() {
+let appSig = "";
+function appSignature() {            // everything the table draws; the page's timers re-render often and must not rebuild it for nothing
+  return JSON.stringify([appData && appData.rows, appData && appData.allowed, appData && appData.used, linkChecks, wasRunning]);
+}
+function renderApp(force) {
+  const sig = appSignature();
+  if (!force && sig === appSig && $("appTable").rows.length) { renderAppSummary(); return; }    // nothing to redraw: leave focus and typing alone
+  appSig = sig;
+  // remember which field has focus and what is typed, so a redraw that is needed does not throw them away
+  const active = document.activeElement, typing = active && active.dataset && active.dataset.rateKey
+    ? { key: active.dataset.rateKey, value: active.value, at: active.selectionStart } : null;
+  const typed = {};
+  document.querySelectorAll("#appTable input[data-rate-key]").forEach(i => { if (i.value !== i.defaultValue) typed[i.dataset.rateKey] = i.value; });
+  drawAppTable(typed);
+  if (typing) {
+    const box = document.querySelector(`#appTable input[data-rate-key="${CSS.escape(typing.key)}"]`);
+    if (box) { box.focus(); try { box.setSelectionRange(typing.at, typing.at); } catch (e) { /* not a text box */ } }
+  }
+}
+function renderAppSummary() { /* the counts under the heading follow the limits without touching the table */
+  const data = appData; if (!data || !data.allowed) return;
+  const ready = appReady();
+  $("appSummary").textContent = Object.keys(CHANNEL_NAMES).map(ch => {
+    const used = data.used.app_by_channel[ch] || 0;
+    const n = ready.filter(r => r.OTA_name === ch).length;
+    return `${CHANNEL_NAMES[ch]}: ${used} of ${data.app_per_channel} used today, ${n} ready`;
+  }).join("  ·  ");
+}
+function drawAppTable(typed = {}) {
   const data = appData, table = $("appTable");
   table.textContent = "";
   if (!data) return;
@@ -799,11 +873,12 @@ function renderApp() {
     };
     tr.insertCell().appendChild(shotBtn);
     const rate = document.createElement("input");
-    rate.type = "text"; rate.placeholder = "e.g. 76"; rate.value = r.rate;
+    rate.type = "text"; rate.placeholder = "e.g. 76"; rate.value = r.rate; rate.dataset.rateKey = r.key;
+    if (r.key in typed) rate.value = typed[r.key];                    // typed but not saved yet: kept across a redraw
     rate.onchange = async () => {                       // saved as typed; a bad value is refused and put back
       try { await api("/api/app/rate", { csv: $("appCsvPath").value, chain, key: r.key, rate: rate.value }); r.rate = rate.value.trim().replace(",", "."); }
       catch (e) { fail(e); rate.value = r.rate; }
-      renderApp();
+      renderApp(true);
     };
     tr.insertCell().appendChild(rate);
     const mark = tr.insertCell(); mark.textContent = r.shot && r.rate ? "✓" : ""; mark.className = "good";
@@ -878,7 +953,7 @@ $("appFollowBtn").onclick = () => {
 };
 $("appRun").onclick = () => {
   since = 0; $("appLog").textContent = ""; $("log").textContent = "";
-  api("/api/app/run", { csv: $("appCsvPath").value, chain }).catch(fail);
+  api("/api/app/run", { csv: $("appCsvPath").value, chain }).then(() => scrollToRun("aRunSection")).catch(fail);
 };
 $("appStop").onclick = () => api("/api/stop", {}).catch(fail);
 
@@ -1104,6 +1179,15 @@ function renderRun(state, running) {
           const tr = body.insertRow();
           tr.insertCell().textContent = label; tr.insertCell().textContent = value === null ? "–" : value;
           const mark = tr.insertCell(); mark.textContent = ok === null ? "" : ok ? "✓" : "✗"; mark.className = ok === null ? "" : ok ? "good" : "problem";
+          const field = label === "Base cancellation" ? "base_cancellation" : label === "Channel cancellation" ? "channel_cancellation" : "";
+          if (field && (state.phase === "ready" || state.phase === "error")) {      // change it by hand if the results file had it wrong
+            const flip = document.createElement("button");
+            const now = field === "base_cancellation" ? state.values.base_cancellation : state.values.channel_cancellation;
+            flip.textContent = now ? "Untick" : "Tick"; flip.title = "Set this on the form yourself if the results file has it wrong";
+            flip.style.marginLeft = "10px"; flip.style.padding = "2px 10px";
+            flip.onclick = () => { flip.disabled = true; api("/api/send", { text: `c:${field}:${now ? 0 : 1}` }).catch(e => { fail(e); flip.disabled = false; }); };
+            mark.appendChild(flip);
+          }
         }
       }
       $(p + "Msg").textContent = state.message || (state.problems && state.problems.length ? state.problems.join("; ") : "");
@@ -1126,12 +1210,46 @@ function renderRun(state, running) {
 $("chromeBtn").onclick = () => api("/api/chrome", {}).catch(fail);
 const screenArea = () => ({ left: screen.availLeft || 0, top: screen.availTop || 0, width: screen.availWidth, height: screen.availHeight });
 $("arrangeBtn").onclick = () => api("/api/arrange", screenArea()).catch(fail);
+/* ---- foldable sections: click a heading (or press Enter on it) to fold it up; remembered per section ---- */
+const FOLD_DEFAULT = { "panelUpload:1. Chrome": true, "panelUpload:Log": true, "panelApp:Log": true };   // folded the first time
+function foldState() { try { return JSON.parse(localStorage.getItem("mpFold") || "{}"); } catch (e) { return {}; } }
+function setFold(sec, key, folded, save = true) {
+  sec.classList.toggle("collapsed", folded);
+  sec.querySelector(":scope > h2").setAttribute("aria-expanded", String(!folded));
+  if (!save) return;
+  const st = foldState(); st[key] = folded;
+  try { localStorage.setItem("mpFold", JSON.stringify(st)); } catch (e) { /* not remembered */ }
+}
+function initFolds() {
+  const st = foldState();
+  document.querySelectorAll("#panelUpload > div > section, #panelUpload > section, #panelApp > section, #panelQa > section, #panelUpload section, #panelApp section, #panelQa section").forEach(sec => {
+    const h = sec.querySelector(":scope > h2");
+    if (!h || sec.classList.contains("fold")) return;
+    const key = sec.closest("[id^=panel]").id + ":" + h.firstChild.textContent.trim();
+    sec.classList.add("fold"); h.tabIndex = 0; h.setAttribute("role", "button");
+    setFold(sec, key, key in st ? st[key] : !!FOLD_DEFAULT[key], false);
+    const toggle = () => setFold(sec, key, !sec.classList.contains("collapsed"));
+    h.addEventListener("click", e => { if (!e.target.closest("button, input, a")) toggle(); });
+    h.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  });
+}
+const unfold = id => { const sec = $(id); if (sec && sec.classList.contains("collapsed")) sec.querySelector(":scope > h2").click(); };
+initFolds();
+
+// Once a run has started, glide down to its card so the form values and screenshots fill the window
+// (not when the click was refused, and with no animation for people who have asked their system for reduced motion)
+function scrollToRun(id) {
+  const el = $(id); if (!el || el.closest("[hidden]")) return;
+  unfold(id);                                       // a folded Run card is opened first, so there is something to show
+  const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+}
 $("runBtn").onclick = () => {
   const csv = $("csvSelect").value;
   if (!csv) return alert("No results CSV selected");
   since = 0; $("log").textContent = "";
   api("/api/run", { csv, chain, dry_run: $("dryRun").checked, limit: $("limit").value })
-    .catch(fail);
+    .then(() => scrollToRun("uRunSection")).catch(fail);
 };
 $("quitAppBtn").onclick = () => {
   if (!confirm("Stop the tool server?")) return;
@@ -1155,6 +1273,7 @@ async function poll() {
     }
     $("chromeDot").classList.toggle("on", s.chrome);
     $("chromeText").textContent = s.chrome ? "running" : "not running";
+    $("chromeSummary").textContent = s.chrome ? "· running" : "· not running";
     $("runBtn").disabled = s.running;
     for (const id of ["stopBtn", "appStop"]) $(id).disabled = !s.running;
     renderRun(s.state, s.running);
@@ -1195,7 +1314,7 @@ $("gateSkip").onclick = closeGate;
 checkLogin();
 gateTimer = setInterval(checkLogin, 4000);
 settingsReady = loadSettings();
-restoreCsv();
+startupCsv();
 
 /* ---- updates: the first thing on screen is a check for a newer release; it clears itself when there is nothing to do ---- */
 const plainNotes = t => String(t || "").replace(/^#{1,6}\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/^[-*]\s+/gm, "• ");

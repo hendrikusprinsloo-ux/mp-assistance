@@ -2,7 +2,7 @@
 
 Fills Parity Manager "Add Mobile Parity Issue" forms from the parity scraper `results_*.csv`, attaches the
 screenshots, and lets you check and save each issue from the app. It also raises Mobile App issues (Choice) from your phone
-screenshots, and has a QA tab to check what was saved. Version 1.8.5 (see `VERSION`, also shown in the page header).
+screenshots, and has a QA tab to check what was saved. Version 1.9.0 (see `VERSION`, also shown in the page header).
 
 A results file made on another computer works too: its screenshot paths point at that computer, so the tool looks for the same
 file names in the folder next to the CSV. Keep the CSV and its screenshots together.
@@ -34,6 +34,17 @@ The button in the top corner has two parts: the chain name (`Choice ▾`) reopen
 dashboard for today (tooltip: "Open dashboard…"). If the dashboard cannot be read, the tool falls back to `issues_ledger.csv`, a note it
 keeps of what this computer saved today, and says so. If more are confirmed than the limit allows, a red banner appears, the
 count turns red, and runs and saves are refused. The room kept for Mobile App issues is not given to Upload runs.
+
+**What is new in 1.9.0**
+- **Foldable sections:** click a heading to fold it up; the choice is remembered. "1. Chrome" and the Logs start folded.
+- **Smooth scroll:** starting a run glides down to its "3. Run" card.
+- **Cancellation switch:** while an issue is ready, **Tick** / **Untick** beside each cancellation row changes it on the form. The done file notes
+  "Changed by hand: ...".
+- **Default runs folder:** **Set default runs folder...** (Upload tab) picks the folder that holds your run folders. When the app starts it loads the
+  newest `results_*.csv` in it (by the time in the file name); **Load latest results** does it on demand, and **Choose file...** still works. A page
+  reload keeps the file in use. If macOS blocks the folder, the page says to allow it under Privacy & Security > Files and Folders.
+- **Mobile App tab:** the table is no longer redrawn by the page's timers, so text fields and buttons keep focus while you work.
+- **Fixes from 1.8.4 / 1.8.5:** the chosen results file is remembered across a page reload, and a cancellation toggle that ignores a click is set directly.
 
 **Remembered file and stubborn toggles (1.8.4, fixed in 1.8.5):** the Upload tab remembers the results CSV you last chose, so a page reload does not empty it
 (if the file was moved it is forgotten). When the form's cancellation toggle ignores a click, the tool sets it directly and checks it took,
