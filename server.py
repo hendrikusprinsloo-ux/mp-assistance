@@ -34,6 +34,7 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 CHROME_PROFILE = Path.home() / "chrome-mp-profile"
 CHROME_URL = "http://127.0.0.1:9222"
 LOGIN_URL = "https://paritymanager.mylighthouse.com/admin/"
+LIGHTHOUSE_DOMAIN = "mylighthouse.com"                 # the Google account the tool's Chrome is signed into should be one of these
 ISSUE_URL = "https://paritymanager.mylighthouse.com/admin/parity_manager/adminpromotionparityissue/{}/change/"
 UI_URL = f"http://{HOST}:{PORT}"
 SETTINGS = HERE / "settings.json"
@@ -202,8 +203,8 @@ APP_CHAIN = "Choice"   # Mobile App screenshots are only taken for Choice
 DEFAULT_CAPS = {"Choice": {"web": 36, "app": 2}, "Best Western": {"web": 10, "app": 0}, "Wyndham": {"web": 50, "app": 0}}
 CHANNEL_NAMES = {"bookingdotcom": "Booking.com", "expedia": "Expedia"}
 WEB_CHANNELS = {"priceline": "Priceline", "bookingdotcom": "Booking.com", "expedia": "Expedia"}   # the channels web issues are raised for
-# per-channel web limits for each chain: Choice's scraper gives 12 of each; 0 means no limit for that channel
-DEFAULT_CHANNEL_CAPS = {"Choice": {"priceline": 12, "bookingdotcom": 12, "expedia": 12},
+# per-channel web limits for each chain: Choice's are 4 Priceline, 16 Booking.com and 16 Expedia (36 in all); 0 means no limit for that channel
+DEFAULT_CHANNEL_CAPS = {"Choice": {"priceline": 4, "bookingdotcom": 16, "expedia": 16},
                         "Best Western": {"priceline": 0, "bookingdotcom": 0, "expedia": 0},
                         "Wyndham": {"priceline": 0, "bookingdotcom": 0, "expedia": 0}}
 
@@ -840,7 +841,8 @@ def app_eligible(csv_path, chain):
                      "brand_code": row["brand_code"], "from_date": mp_upload.normalize_date(row["from_date"]),
                      "base_rate": plan["base_shop_rate"], "web_rate": plan["channel_shop_rate"],
                      "base_shot_missing": not Path(plan["base_screenshot"]).is_file(),
-                     "shot": saved.get("shot", ""), "shot_name": saved.get("source", ""), "rate": saved.get("rate", "")})
+                     "shot": saved.get("shot", ""), "shot_name": saved.get("source", ""), "rate": saved.get("rate", ""),
+                     "cancellation": saved.get("cancellation", "")})
     done_info = {"name": done.name, "count": len(mp_upload.load_done_entries(done))} if done.is_file() else None
     return {"allowed": True, "rows": rows, "skipped": skipped, "done_file": done_info, **limits_for(chain)}
 
@@ -878,6 +880,21 @@ def app_shot(opts):
     inputs[row["key"]] = {**inputs.get(row["key"], {}), "shot": str(dest), "source": source.name}
     save_app_inputs(csv_path, inputs)
     return {"ok": True, "shot_name": source.name}, 200
+
+
+def app_cancellation(opts):
+    """Save the channel cancellation chosen for one Mobile App row: 'ticked', 'not ticked', or '' to clear it."""
+    found, error = app_row(opts)
+    if error:
+        return error
+    csv_path, row = found
+    value = str(opts.get("cancellation", "")).strip()
+    if value not in ("", *mp_upload.APP_CANCELLATION):
+        return {"error": "Choose ticked or not ticked"}, 400
+    inputs = load_app_inputs(csv_path)
+    inputs[row["key"]] = {**inputs.get(row["key"], {}), "cancellation": value}
+    save_app_inputs(csv_path, inputs)
+    return {"ok": True}, 200
 
 
 def app_rate(opts):
@@ -1027,9 +1044,9 @@ def app_run(opts):
     if chain != APP_CHAIN:
         return {"error": f"Mobile App issues are only taken for {APP_CHAIN}."}, 400
     data = app_eligible(csv_path, chain)
-    ready = [r for r in data["rows"] if r["shot"] and r["rate"]]
+    ready = [r for r in data["rows"] if r["shot"] and r["rate"] and r["cancellation"]]
     if not ready:
-        return {"error": "Add a phone screenshot and the rate to at least one issue first."}, 409
+        return {"error": "Add a phone screenshot, the rate and the channel cancellation to at least one issue first."}, 409
     lim = limits_for(chain, fresh=True)       # the dashboard's total, with everyone's issues in it
     if not IGNORE_CAP["on"] and (lim["over"] or lim["app_total_remaining"] < len(ready)):
         return {"error": f"{chain} has {lim['used_total']} of {lim['total_cap']} issues confirmed today, which leaves room for "
@@ -1162,10 +1179,25 @@ def arrange_windows(opts):
     return {"ok": True}, 200
 
 
+def chrome_account():
+    """The Google account the tool's Chrome is signed into, read from its profile: {email, name, ok}. `email` is empty when nobody is
+    signed in or the profile cannot be read (Chrome may store it differently in another version, so that is 'cannot tell', not an error)."""
+    try:
+        prefs = json.loads((CHROME_PROFILE / "Default" / "Preferences").read_text())
+    except (OSError, ValueError):
+        return {"email": "", "name": "", "ok": False, "known": False}
+    accounts = [a for a in (prefs.get("account_info") or []) if isinstance(a, dict) and a.get("email")]
+    if not accounts:
+        return {"email": "", "name": "", "ok": False, "known": True}
+    email = accounts[0]["email"]
+    return {"email": email, "name": accounts[0].get("full_name") or "", "known": True,
+            "ok": email.lower().endswith("@" + LIGHTHOUSE_DOMAIN)}
+
+
 def pm_status():
     """Is the tool's Chrome open, and signed in to Parity Manager?"""
     if not chrome_up():
-        return {"chrome": False, "signed_in": False}, 200
+        return {"chrome": False, "signed_in": False, "account": chrome_account()}, 200
     try:
         res = subprocess.run([sys.executable, str(HERE / "mp_session.py"), "--chrome", CHROME_URL],
                              cwd=HERE, capture_output=True, text=True, timeout=30)
@@ -1173,7 +1205,7 @@ def pm_status():
         return {"chrome": True, "signed_in": False, "error": "The sign-in check timed out"}, 200
     for line in res.stdout.splitlines():
         if line.startswith("RESULT "):
-            return {"chrome": True, **json.loads(line[len("RESULT "):])}, 200
+            return {"chrome": True, "account": chrome_account(), **json.loads(line[len("RESULT "):])}, 200
     error = next((l[len("ERROR "):] for l in reversed(res.stderr.splitlines()) if l.startswith("ERROR ")), "Sign-in check failed")
     return {"chrome": True, "signed_in": False, "error": error}, 200
 
@@ -1405,6 +1437,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/ignore-cap": lambda: set_ignore_cap(opts),
             "/api/app/shot": lambda: app_shot(opts),
             "/api/app/rate": lambda: app_rate(opts),
+            "/api/app/cancellation": lambda: app_cancellation(opts),
             "/api/app/run": lambda: app_run(opts),
             "/api/app/drive": lambda: app_drive(opts),
             "/api/app/link": lambda: app_link(opts),

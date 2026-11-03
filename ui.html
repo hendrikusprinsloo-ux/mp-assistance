@@ -127,6 +127,7 @@
   <div class="gate-card">
     <h2>Sign in to Parity Manager</h2>
     <p id="gateMsg" style="margin:0 0 6px">Checking your Parity Manager sign-in…</p>
+    <p id="gateAccount" class="hint" style="margin:6px 0 10px"></p>
     <div class="actions">
       <button id="gateOpen">Open the login window</button>
       <button id="gateCheck">Check again</button>
@@ -796,7 +797,7 @@ async function loadApp() {
   renderApp();
 }
 
-function appReady() { return appData ? appData.rows.filter(r => r.shot && r.rate) : []; }
+function appReady() { return appData ? appData.rows.filter(r => r.shot && r.rate && r.cancellation) : []; }
 
 let appSig = "";
 function appSignature() {            // everything the table draws; the page's timers re-render often and must not rebuild it for nothing
@@ -848,7 +849,7 @@ function drawAppTable(typed = {}) {
   $("appRun").disabled = !ready.length || wasRunning;
   if (!data.rows.length) return;
   const head = table.createTHead().insertRow();
-  for (const h of ["Hotel", "Channel", "Base rate", "Web rate", "Phone link", "Phone screenshot", "App rate", ""]) {
+  for (const h of ["Hotel", "Channel", "Base rate", "Web rate", "Phone link", "Phone screenshot", "App rate", "Channel cancellation", ""]) {
     const th = document.createElement("th"); th.textContent = h; head.appendChild(th);
   }
   const body = table.createTBody();
@@ -882,7 +883,19 @@ function drawAppTable(typed = {}) {
       renderApp(true);
     };
     tr.insertCell().appendChild(rate);
-    const mark = tr.insertCell(); mark.textContent = r.shot && r.rate ? "✓" : ""; mark.className = "good";
+    const cancel = document.createElement("select");
+    cancel.title = "The cancellation policy shown on the phone page, which can differ from the web page. A row is ready once this is chosen.";
+    for (const [value, label] of [["", "Choose…"], ["ticked", "Ticked (refundable)"], ["not ticked", "Not ticked (non-refundable)"]]) {
+      const o = document.createElement("option"); o.value = value; o.textContent = label; cancel.appendChild(o);
+    }
+    cancel.value = r.cancellation || "";
+    cancel.onchange = async () => {
+      try { await api("/api/app/cancellation", { csv: $("appCsvPath").value, chain, key: r.key, cancellation: cancel.value }); r.cancellation = cancel.value; }
+      catch (e) { fail(e); cancel.value = r.cancellation || ""; }
+      renderApp(true);
+    };
+    tr.insertCell().appendChild(cancel);
+    const mark = tr.insertCell(); mark.textContent = r.shot && r.rate && r.cancellation ? "✓" : ""; mark.className = "good";
   }
 }
 
@@ -1302,11 +1315,21 @@ showTab("upload");                       // the app always opens on the Upload t
 
 // Parity Manager sign-in comes first: the page waits here until the tool's Chrome is signed in
 let checkingLogin = false, gateTimer = null;
+// The Google account the tool's Chrome profile is signed into must be the person's Lighthouse one (it is what lets the Lighthouse pages open)
+function showAccount(a) {
+  const el = $("gateAccount"); if (!el || !a) return;
+  el.classList.toggle("problem", a.known && !a.ok);
+  el.textContent = !a.known ? ""
+    : a.email ? (a.ok ? `Chrome is signed in as ${a.email}.`
+                      : `Chrome is signed in as ${a.email}, which is not a Lighthouse address. Sign that profile in with your Lighthouse Google account (click the profile icon in the tool's Chrome), or Lighthouse pages may not open.`)
+    : "The tool's Chrome is not signed in to a Google account. Sign it in with your Lighthouse Google account (the profile icon in its top corner) so the Lighthouse pages open.";
+}
 async function checkLogin() {
   if (checkingLogin) return;
   checkingLogin = true;
   try {
     const s = await api("/api/pm/status");
+    showAccount(s.account);
     if (s.signed_in) return closeGate();
     $("gateMsg").textContent = !s.chrome
       ? "The tool's Chrome isn't open yet. Open the login window, then sign in to Parity Manager there."
