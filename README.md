@@ -2,7 +2,7 @@
 
 Fills Parity Manager "Add Mobile Parity Issue" forms from the parity scraper `results_*.csv`, attaches the
 screenshots, and lets you check and save each issue from the app. It also raises Mobile App issues (Choice) from your phone
-screenshots, and has a QA tab to check what was saved. Version 1.8.4 (see `VERSION`, also shown in the page header).
+screenshots, and has a QA tab to check what was saved. Version 1.8.5 (see `VERSION`, also shown in the page header).
 
 A results file made on another computer works too: its screenshot paths point at that computer, so the tool looks for the same
 file names in the folder next to the CSV. Keep the CSV and its screenshots together.
@@ -35,7 +35,7 @@ dashboard for today (tooltip: "Open dashboard…"). If the dashboard cannot be r
 keeps of what this computer saved today, and says so. If more are confirmed than the limit allows, a red banner appears, the
 count turns red, and runs and saves are refused. The room kept for Mobile App issues is not given to Upload runs.
 
-**Remembered file and stubborn toggles (1.8.4):** the Upload tab remembers the results CSV you last chose, so a page reload does not empty it
+**Remembered file and stubborn toggles (1.8.4, fixed in 1.8.5):** the Upload tab remembers the results CSV you last chose, so a page reload does not empty it
 (if the file was moved it is forgotten). When the form's cancellation toggle ignores a click, the tool sets it directly and checks it took,
 or says which toggle would not hold, instead of stopping with a long error.
 
@@ -64,8 +64,8 @@ The page grows with the window: in full screen or on a big monitor the layout, t
 right keys) switch to the issue's other screenshot, **+**, **−**, **Fit** and **100%** zoom (keys `+`, `-`, `0`, `1`; clicking the image
 flips between fit and actual size), **New window** opens the image on its own, and Esc closes the viewer.
 
-When the app starts it puts the tool window on the left half of the screen and Parity Manager on the right half. **Arrange windows**
-does it again at any time. The **Light mode / Dark mode** button in the top corner switches the theme and keeps the choice
+The windows are not moved on their own. **Arrange windows** puts the tool window on the left half of the screen and Parity Manager on the
+right half whenever you click it. The **Light mode / Dark mode** button in the top corner switches the theme and keeps the choice
 in `settings.json`.
 
 ## Tabs
