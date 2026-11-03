@@ -37,6 +37,7 @@ LOGIN_URL = "https://paritymanager.mylighthouse.com/admin/"
 ISSUE_URL = "https://paritymanager.mylighthouse.com/admin/parity_manager/adminpromotionparityissue/{}/change/"
 UI_URL = f"http://{HOST}:{PORT}"
 SETTINGS = HERE / "settings.json"
+SERVER_STARTED = int(time.time())          # lets the page tell a fresh app start from a page reload
 
 lock = threading.Lock()
 log = []        # output lines of the current/last run
@@ -99,6 +100,69 @@ PICKS = {   # kind -> (prompt, file types, folder the dialog opens in)
 }
 
 
+def pick_folder(prompt):
+    """Native macOS folder dialog. Returns (path, error) like pick_file."""
+    start = RUNS_DIR if RUNS_DIR.exists() else Path.home() / "Desktop"
+    script = ('tell current application to activate\n'
+              f'set f to choose folder with prompt "{prompt}" default location POSIX file "{start}"\n'
+              'POSIX path of f')
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return None, None
+    path = res.stdout.strip().rstrip("/")
+    if res.returncode != 0 or not path:
+        return None, (None if "-128" in res.stderr else (res.stderr.strip() or "Folder dialog failed"))
+    return path, None
+
+
+RESULTS_STAMP = re.compile(r"results_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})")
+
+
+def find_latest_results(folder):
+    """The newest results_*.csv under a default runs folder: directly in it, in its run_* folders, or one folder further down
+    (for example `V2 runs/run_2026-11-03_10-36-52/results_2026-11-03_10-36-52.csv`). Newest by the timestamp in the file name."""
+    base = Path(str(folder or "")).expanduser()
+    if not base.is_dir():
+        return None
+    found = []
+    for pattern in ("results_*.csv", "run_*/results_*.csv", "*/run_*/results_*.csv"):
+        try:
+            found += [p for p in base.glob(pattern) if p.is_file() and not p.name.startswith("done_")]
+        except PermissionError:
+            raise                                   # macOS is keeping this app out of the folder: said plainly by the caller
+    def newest(p):
+        match = RESULTS_STAMP.match(p.name)
+        return (match.group(1) if match else "", p.stat().st_mtime)
+    return max(found, key=newest) if found else None
+
+
+def save_runs_folder(opts):
+    folder = str(opts.get("folder") or "").strip()
+    if folder and not Path(folder).expanduser().is_dir():
+        return {"error": "That folder was not found"}, 400
+    settings = load_settings()
+    if folder:
+        settings["runs_folder"] = folder
+    else:
+        settings.pop("runs_folder", None)
+    save_settings(settings)
+    return latest_results_reply()
+
+
+ACCESS_HINT = ("macOS is not letting this app look inside that folder. Open System Settings > Privacy & Security > Files and Folders "
+               "(or Full Disk Access), switch on the folder for Terminal, then start the app again. A folder inside Documents is not affected.")
+
+
+def latest_results_reply():
+    folder = load_settings().get("runs_folder", "")
+    try:
+        latest = find_latest_results(folder) if folder else None
+    except PermissionError:
+        return {"folder": folder, "latest": "", "run": "", "error": ACCESS_HINT}, 200
+    return {"folder": folder, "latest": str(latest) if latest else "", "run": latest.parent.name if latest else ""}, 200
+
+
 def pick_file(kind):
     """Native macOS file dialog (Finder-style). Blocks until the user chooses or cancels. Returns the chosen path or None."""
     prompt, types, folder = PICKS.get(kind, PICKS["results"])
@@ -118,6 +182,9 @@ def pick_file(kind):
 
 
 def pick_csv(opts):
+    if opts.get("kind") == "folder":
+        path, error = pick_folder("Choose the folder that holds your run folders")
+        return ({"error": error}, 500) if error else ({"cancelled": True}, 200) if path is None else ({"path": path}, 200)
     path, error = pick_file(opts.get("kind"))
     if error:
         return {"error": error}, 500
@@ -1144,7 +1211,7 @@ def open_tool_windows():
 
 
 def send_to_run(text):
-    if not (text in ("save", "s", "q") or text.startswith("d:")):   # only what the upload tool understands: save, skip, decline (with a note), stop
+    if not (text in ("save", "s", "q") or text.startswith("d:") or text.startswith("c:")):   # only what the upload tool understands: save, skip, decline (with a note), stop
         text = None
     if text is None:
         return {"error": "Unknown command"}, 400
@@ -1242,7 +1309,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/":
             return self.reply((HERE / "ui.html").read_bytes(), ctype="text/html; charset=utf-8")
         if url.path == "/api/settings":
-            return self.reply({"theme": "dark", **load_settings(), "app_mode": "--with-chrome" in sys.argv, "chains": CHAINS, "chain": current_chain(), "app_chain": APP_CHAIN, "sf_accounts": SF_ACCOUNTS, "today": time.strftime("%Y-%m-%d"), "version": version()})
+            return self.reply({"theme": "dark", **load_settings(), "app_mode": "--with-chrome" in sys.argv, "chains": CHAINS, "chain": current_chain(), "app_chain": APP_CHAIN, "sf_accounts": SF_ACCOUNTS, "today": time.strftime("%Y-%m-%d"), "version": version(), "started": SERVER_STARTED})
         if url.path == "/api/status":
             since = int(parse_qs(url.query).get("since", ["0"])[0])
             with lock:
@@ -1270,6 +1337,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(body, status)
         if url.path == "/api/review/items":
             return self.reply({"items": review_items(parse_qs(url.query).get("csv", [""])[0])})
+        if url.path == "/api/runs/latest":
+            body, status = latest_results_reply()
+            return self.reply(body, status)
         if url.path == "/api/csv/exists":      # lets the page restore the file it had chosen before a reload
             return self.reply({"exists": results_csv(parse_qs(url.query).get("csv", [""])[0]) is not None})
         if url.path == "/api/update/check":
@@ -1329,6 +1399,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/update/dismiss": lambda: (mp_update.dismiss_notes(HERE) or ({"ok": True}, 200)),
             "/api/run/save": save_issue,
             "/api/qa/dashboard": lambda: qa_dashboard(opts),
+            "/api/runs/folder": lambda: save_runs_folder(opts),
             "/api/chain": lambda: save_chain(opts),
             "/api/limits": lambda: save_limits(opts),
             "/api/ignore-cap": lambda: set_ignore_cap(opts),

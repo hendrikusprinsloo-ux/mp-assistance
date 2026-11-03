@@ -334,6 +334,7 @@ def wait_for_review(page, info, plan):
     while not COMMANDS.empty():
         COMMANDS.get_nowait()   # anything left over from an earlier issue
     phase, message, shown, passes = "ready", "", None, 0
+    overrides = plan.setdefault("_overrides", set())      # cancellation toggles the person changed by hand, for the done file
     while True:
         try:
             if "/add/" not in page.url:
@@ -374,6 +375,18 @@ def wait_for_review(page, info, plan):
             emit(info, phase, message=message, values=shown)
         elif command == "q":
             return "q"
+        elif command.startswith("c:"):      # c:<field>:<1|0>: the person changed a cancellation toggle on the card
+            try:
+                _, field, value = command.split(":")
+                if field in ("base_cancellation", "channel_cancellation") and value in ("0", "1"):
+                    set_toggle(page, field, value == "1")
+                    plan[field] = value == "1"            # what is saved and logged is what the form now holds
+                    overrides.add(field)
+                    shown = read_back(page)
+                    emit(info, phase, values=shown, message=message)
+            except Exception as e:
+                print(f"  could not change {command}: {str(e).splitlines()[0][:120]}")
+                emit(info, phase, values=read_back(page), message=f"Could not change that toggle: {str(e).splitlines()[0][:100]}")
         elif command.startswith("d:"):      # declined, with the person's note
             return ("declined", command[2:].strip())
         else:                       # "s", or just Enter, skips this issue
@@ -501,8 +514,11 @@ def main():
                 emit(info, "ready", values=values)
                 print("  filled. Check it in the app and click Save issue (or click Save in Chrome). 's' + Enter skips, 'q' + Enter stops.")
                 outcome, note = wait_for_review(page, info, plan), "; ".join(problems)
+                changed = sorted(plan.get("_overrides", ()))
+                if changed:
+                    note = (note + "; " if note else "") + "Changed by hand: " + ", ".join(f.replace("_", " ") for f in changed)
                 if isinstance(outcome, tuple):
-                    outcome, note = outcome[0], "Declined: " + (outcome[1] or "no note")
+                    outcome, note = outcome[0], "Declined: " + (outcome[1] or "no note") + (note[note.index("Changed by hand"):].join([" (", ")"]) if "Changed by hand" in note else "")
                     print("  " + note)
                 if outcome == "q":
                     break
