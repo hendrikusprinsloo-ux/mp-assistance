@@ -1078,8 +1078,6 @@ arranged = False
 def arrange_windows(opts):
     """Tool window left, Parity Manager right, within the screen area the page reported."""
     global arranged
-    if opts.get("auto") and arranged:  # the automatic arrange only happens once per server run
-        return {"ok": True, "skipped": True}, 200
     try:
         area = [int(opts[k]) for k in ("left", "top", "width", "height")]
     except (KeyError, TypeError, ValueError):
