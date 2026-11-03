@@ -30,6 +30,7 @@ from pathlib import Path
 CHROME_URL = "http://127.0.0.1:9222"   # the tool's own Chrome, started with its debugging port
 FORM_READY = "#id_base_shop_rate"
 REFUNDABLE = {"fully refundable": True, "non-refundable": False}
+APP_CANCELLATION = {"ticked": True, "not ticked": False}     # what the person picks for a Mobile App issue's channel cancellation
 LOG_FIELDS = ["timestamp", "key", "OTA_name", "brand_code", "from_date", "subscription_id", "hotel_name", "outcome", "note",
               "client", "sheet_url", "issue_id", "base_rate", "channel_rate", "base_cancellation", "channel_cancellation",
               "platform", "difference"]
@@ -192,7 +193,8 @@ def repair_log(log_path):
 def plan_for(row, platform="web", app_input=None):
     """Return (plan, problems). plan is None when the row cannot be processed.
 
-    For platform "app", app_input is {"shot": png path, "rate": text}: the phone screenshot and the rate typed from it."""
+    For platform "app", app_input is {"shot": png path, "rate": text, "cancellation": "ticked"|"not ticked"}: the phone screenshot, the rate typed
+    from it and the channel cancellation chosen for it (the phone page can differ from the web page the results file was read from)."""
     problems = []
     if row.get("status") != "ok" or row.get("branddotcom_status") != "ok":
         return None, [f"status={row.get('status')!r} branddotcom_status={row.get('branddotcom_status')!r}"]
@@ -206,6 +208,8 @@ def plan_for(row, platform="web", app_input=None):
             return None, [f"Mobile App issues are only for Booking.com and Expedia, not {row.get('OTA_name')!r}"]
         if not app_input or not app_input.get("shot") or not str(app_input.get("rate", "")).strip():
             return None, ["no phone screenshot and rate given yet"]
+        if app_input.get("cancellation") not in APP_CANCELLATION:
+            return None, ["no channel cancellation chosen yet"]
 
     plan = {
         "url": row["add_issue_to_pm"],
@@ -236,6 +240,9 @@ def plan_for(row, platform="web", app_input=None):
         else:
             plan[form_field] = None  # leave whatever the URL pre-filled, flag it for review
             problems.append(f"{column} is {row.get(column)!r}: {form_field} left as pre-filled")
+    if platform == "app":
+        plan["channel_cancellation"] = APP_CANCELLATION[app_input["cancellation"]]    # chosen by the person, whatever the results file says
+        problems[:] = [p for p in problems if not p.startswith("channel_cancellation_policy")]
     return plan, problems
 
 

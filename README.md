@@ -2,7 +2,7 @@
 
 Fills Parity Manager "Add Mobile Parity Issue" forms from the parity scraper `results_*.csv`, attaches the
 screenshots, and lets you check and save each issue from the app. It also raises Mobile App issues (Choice) from your phone
-screenshots, and has a QA tab to check what was saved. Version 1.9.1 (see `VERSION`, also shown in the page header).
+screenshots, and has a QA tab to check what was saved. Version 1.9.2 (see `VERSION`, also shown in the page header).
 
 A results file made on another computer works too: its screenshot paths point at that computer, so the tool looks for the same
 file names in the folder next to the CSV. Keep the CSV and its screenshots together.
@@ -35,6 +35,14 @@ dashboard for today (tooltip: "Open dashboard…"). If the dashboard cannot be r
 keeps of what this computer saved today, and says so. If more are confirmed than the limit allows, a red banner appears, the
 count turns red, and runs and saves are refused. The room kept for Mobile App issues is not given to Upload runs.
 
+**What is new in 1.9.2**
+- **Mobile App issues take a channel cancellation you choose.** The Mobile App table has a **Channel cancellation** column (Ticked / Not ticked), because the
+  phone page's policy can differ from the web page the results file was read from. A row is only ready once it has a phone screenshot, an App rate **and** a
+  cancellation, and the form is filled with what you picked. The base (brand.com) cancellation still comes from the results file.
+- **Choice's default channel limits** are 4 Priceline, 16 Booking.com and 16 Expedia (36 in all). Limits you have already saved in the chain popup keep their values.
+- **The sign-in screen shows which Google account the tool's Chrome is signed into**, in a warning colour if it is not a `mylighthouse.com` address. The Lighthouse
+  pages need that profile, and the app does not block anyone: it only says so.
+
 **What is new in 1.9.1**
 - **Smooth scrolling on the QA and Mobile App tabs:** on QA the page glides to the next issue's card when you step with the arrows or mark an issue, and to the
   QA report when the last one is marked. On the Mobile App tab it glides to the Issues list once a results file is loaded. Folded sections open first, and
@@ -66,7 +74,7 @@ done file (your computer's username, the time and your result per issue), with a
 cache…** takes someone else's cache file and leaves out the issues they marked OK.
 
 **Limits per channel:** the popup also has a web limit for each of Priceline, Booking.com and Expedia, per chain (0 = no limit for
-that channel). Choice starts at 12 each; Best Western and Wyndham start with none. A channel's count is the dashboard's count for
+that channel). Choice starts at 4 Priceline, 16 Booking.com and 16 Expedia; Best Western and Wyndham start with none. A channel's count is the dashboard's count for
 it less its Mobile App issues (this computer's count if the dashboard cannot be read). A run stops taking a channel once it is full
 (the log says "<channel> limit reached"), and Save issue refuses an issue for a full channel. The limit line shows each channel's count.
 
