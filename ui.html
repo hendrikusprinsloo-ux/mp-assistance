@@ -276,7 +276,7 @@
     <div class="hint">Mobile App issues can be raised for Booking.com and Expedia rows that are lower than brand and have no issue yet today for that hotel on that channel (one issue per channel per subscription). They use the same form with the channel platform set to Mobile App, the base screenshot from the results file, and your phone screenshot and rate for the channel.</div>
   </section>
 
-  <section>
+  <section id="appIssuesSection">
     <h2>2. Issues</h2>
     <div id="appMsg" class="hint" style="margin:0 0 10px"></div>
     <div id="appSummary" class="hint" style="margin:0 0 10px"></div>
@@ -346,7 +346,7 @@
     </div>
   </section>
 
-  <section>
+  <section id="qaReportSection">
     <h2>QA report</h2>
     <div class="actions" style="margin:0">
       <button class="primary" id="qaExport" disabled>Download QA report</button>
@@ -786,6 +786,7 @@ async function setAppCsv(path) {
   $("appCsvPath").value = path; linkChecks = {}; $("appLinksMsg").textContent = "";
   $("appCsvName").textContent = appLabel(path); $("appCsvName").title = path;
   await loadApp();
+  glideTo("appIssuesSection");                         // the list of issues for the file just chosen
 }
 
 async function loadApp() {
@@ -1004,8 +1005,8 @@ $("qaSkipBtn").onclick = async () => {
   } catch (e) { fail(e); }
 };
 
-$("revPrev").onclick = () => { revIdx--; renderReview(true); };
-$("revNext").onclick = () => { revIdx++; renderReview(true); };
+$("revPrev").onclick = () => { revIdx--; renderReview(true); glideTo("revCard"); };
+$("revNext").onclick = () => { revIdx++; renderReview(true); glideTo("revCard"); };
 
 /* ---- screenshot viewer: click any screenshot to see it large, with the other screenshot of the same issue one arrow away ---- */
 let viewerShots = [], viewerAt = 0, viewerZoom = null;       // viewerZoom: null = fit the window, else a multiple of the image's own size
@@ -1101,7 +1102,8 @@ async function markReview(status) {
   const next = revItems.findIndex((i, k) => k > revIdx && !i.review);   // on to the next unreviewed issue
   if (next >= 0) revIdx = next;
   renderReview(true);
-  if (res.completed_path) { $("qaDone").textContent = `QA complete. Results saved as ${res.completed_path}`; $("qaDone").hidden = false; }
+  if (res.completed_path) { $("qaDone").textContent = `QA complete. Results saved as ${res.completed_path}`; $("qaDone").hidden = false; glideTo("qaReportSection"); }
+  else if (next >= 0) glideTo("revCard");              // on to the next issue: back to the top of its card
 }
 $("revOk").onclick = () => markReview("ok").catch(fail);
 $("revBad").onclick = () => markReview("problem").catch(fail);
@@ -1243,6 +1245,13 @@ function scrollToRun(id) {
   unfold(id);                                       // a folded Run card is opened first, so there is something to show
   const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+}
+// Smooth glide to any element, used by the QA and Mobile App tabs. Folded sections are opened first; reduced motion means an instant jump.
+function glideTo(id, block = "start") {
+  const el = $(id); if (!el || el.closest("[hidden]")) return;
+  const sec = el.closest("section.fold"); if (sec && sec.classList.contains("collapsed")) sec.querySelector(":scope > h2").click();
+  const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block });
 }
 $("runBtn").onclick = () => {
   const csv = $("csvSelect").value;
