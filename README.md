@@ -2,7 +2,7 @@
 
 Fills Parity Manager "Add Mobile Parity Issue" forms from the parity scraper `results_*.csv`, attaches the
 screenshots, and lets you check and save each issue from the app. It also raises Mobile App issues (Choice) from your phone
-screenshots, and has a QA tab to check what was saved. Version 1.8.3 (see `VERSION`, also shown in the page header).
+screenshots, and has a QA tab to check what was saved. Version 1.8.4 (see `VERSION`, also shown in the page header).
 
 A results file made on another computer works too: its screenshot paths point at that computer, so the tool looks for the same
 file names in the folder next to the CSV. Keep the CSV and its screenshots together.
@@ -34,6 +34,10 @@ The button in the top corner has two parts: the chain name (`Choice ▾`) reopen
 dashboard for today (tooltip: "Open dashboard…"). If the dashboard cannot be read, the tool falls back to `issues_ledger.csv`, a note it
 keeps of what this computer saved today, and says so. If more are confirmed than the limit allows, a red banner appears, the
 count turns red, and runs and saves are refused. The room kept for Mobile App issues is not given to Upload runs.
+
+**Remembered file and stubborn toggles (1.8.4):** the Upload tab remembers the results CSV you last chose, so a page reload does not empty it
+(if the file was moved it is forgotten). When the form's cancellation toggle ignores a click, the tool sets it directly and checks it took,
+or says which toggle would not hold, instead of stopping with a long error.
 
 **Decline:** each issue card has a **Decline** button (with an optional reason) in place of Skip. A declined issue is recorded in the done
 file as `declined` with its note, and never comes back: not in later runs, not on the Mobile App tab, not in QA. A run loads every

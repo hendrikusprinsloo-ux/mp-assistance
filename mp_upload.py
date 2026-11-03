@@ -250,6 +250,22 @@ def skip_reason(problems):
     return text or "not eligible"
 
 
+def set_toggle(page, field, want):
+    """Tick or untick one of the form's toggles. The page styles them as switches and now and then ignores a click, so when the click
+    does not change the state the value is set directly and the page is told, then checked. A toggle that still will not hold the
+    value raises a plain message (the app shows it) instead of a long traceback."""
+    box = page.locator(f"#id_{field}")
+    try:
+        box.set_checked(want, force=True, timeout=5000)
+        return
+    except Exception:
+        pass
+    box.evaluate("""(el, want) => { if (el.checked !== want) { el.checked = want;
+        el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }""", want)
+    if box.is_checked() != want:
+        raise RuntimeError(f"The form would not set {field.replace('_', ' ')} to {'ticked' if want else 'not ticked'}")
+
+
 def fill_form(page, plan):
     page.goto(plan["url"])
     page.wait_for_selector(FORM_READY, timeout=0)  # blocks until you are logged in and the form shows
@@ -259,7 +275,7 @@ def fill_form(page, plan):
     page.fill("#id_channel_shop_rate", plan["channel_shop_rate"])
     for field in ("base_cancellation", "channel_cancellation"):
         if plan[field] is not None:
-            page.locator(f"#id_{field}").set_checked(plan[field], force=True)
+            set_toggle(page, field, plan[field])
     page.set_input_files("#id_base_screenshot", plan["base_screenshot"])
     page.set_input_files("#id_channel_screenshot", plan["channel_screenshot"])
 
