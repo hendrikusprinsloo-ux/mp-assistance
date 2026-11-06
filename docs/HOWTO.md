@@ -66,16 +66,17 @@ Have these ready each time you work:
 
 1. Double-click **MP Assistance.app** (or `start.command`).
 2. Two Chrome windows open: the **Parity Manager login** and the **tool window** (no address bar). The windows are not moved on
-   their own: click **Arrange windows** to put the tool window on the left half of the screen and Parity Manager on the right.
+   their own: open the **1. Chrome** section (it starts folded) and click **Arrange windows** to put the tool window on the left half of the screen and Parity Manager on the right.
 3. **Check you are signed into Chrome with your Lighthouse profile.** Look at the top-right corner of the **Parity Manager** window that opened:
    - If it shows your picture or initial and your Lighthouse (`mylighthouse.com`) Google account, you are set.
    - If it shows a different account, or a plain "Sign in" or person icon, click that icon, choose **Sign in** (or switch account) and sign in with your
      **Lighthouse Google account**, the same one you use for your Lighthouse logins. If Chrome asks whether to turn on sync, either answer works.
    - Do this first: the Lighthouse pages (such as the Geoinsight screenshots) only open properly from that profile. It is saved, so you normally only do it once per computer.
-4. Sign in to Parity Manager in the same window. The tool window waits and carries on by itself once you are signed in. Under its message it shows
+4. Sign in to Parity Manager in the same window. The tool window waits and carries on by itself once you are signed in (if the login window gets lost, click
+   **Open the login window**; **Check again** looks again straight away). Under its message it shows
    **which Google account the tool's Chrome is signed into**, so you can confirm step 3 worked: it should read "Chrome is signed in as" your Lighthouse address.
    If it shows another address, or says no account, go back to step 3. The app only tells you; it does not stop you continuing.
-5. Closing the tool window stops the app.
+5. Closing the tool window stops the app. So does **Quit app** in the top corner, after it asks you to confirm.
 
 The header shows the version number next to the app's name. **Light mode / Dark mode** switches the theme.
 
@@ -155,14 +156,17 @@ Choice only. Booking.com and Expedia only, limit one of each per day.
       Scan it with the phone, or use **Open page** to open it on the computer, or **Copy link**.
    2. Take the phone screenshot of the page.
 4. Back in the app, for each row:
-   - **Choose phone screenshot…**: pick the JPEG or PNG (AirDrop works; choose *Options > Most Compatible* so iPhone photos are JPEG, not HEIC).
+   - **Choose phone screenshot…**: (the button then shows the file name with ✓) pick the JPEG or PNG (AirDrop works; choose *Options > Most Compatible* so iPhone photos are JPEG, not HEIC).
      A copy is saved with a `.png` name in a `mobile_app` folder next to the results file; your original is untouched.
    - Type the **App rate** shown on the phone screenshot.
    - Choose the **Channel cancellation** shown on the phone page (**Ticked** for refundable, **Not ticked** for non-refundable). It can differ from the
      web page, so it is never copied from the results file for a Mobile App issue.
-   - The row shows ✓ once it has all three.
-5. Optional: **Check all links** follows every row's link and marks each QR button ✓ or ✗ (hover a ✗ for the reason) before you head to your phone.
-6. Click **Upload ready issues**. The forms are filled with Channel platform set to Mobile App, and the card, **Save issue**, **Decline**
+   - The row shows ✓ once it has all three. The button at the bottom then reads **Upload 3 ready issues** (the number of rows that are ready).
+5. Optional: **Send screenshots to Drive** puts the phone screenshots you have chosen into today's folder in the Choice Mobile APP screenshots folder on Google Drive
+   (year, month and day folders are made if they are missing). It uses the Google sign-in of the tool's Chrome and needs the tool's Chrome to be running. The message beside the button
+   says how many were sent, and links to the folder.
+6. Optional: **Check all links** follows every row's link and marks each QR button ✓ or ✗ (hover a ✗ for the reason) before you head to your phone.
+7. Click **Upload ready issues**. The forms are filled with Channel platform set to Mobile App, and the card, **Save issue**, **Decline**
    and Log work exactly as on the Upload tab, including the smooth scroll to the Run card and the **Tick / Untick** switch for cancellations.
    The table keeps your cursor and anything you have typed while the page refreshes in the background. Choosing a results file glides
    to the **2. Issues** list.
@@ -208,20 +212,21 @@ If you restart the app during QA, the tab loads the list again. Your marks are k
 
 **First install:** see [Installing MP Assistance](#installing-mp-assistance-first-time) at the top.
 
-**Updating:** every time the app opens it first asks GitHub whether there is a newer version, installs it, and then starts, so you normally do nothing. (This needs version 1.8 or newer; an older install is offered the update once, as a banner.) If the app was left open for days, a screen offers it:
+**Updating:** every time the app opens it first asks GitHub whether there is a newer version, installs it, and then starts, so you normally do nothing. (This needs version 1.8 or newer; an older install is offered the update on the screen below instead, once it is open.) If a newer version came out while the app was left open, a screen offers it when the page loads:
 
 1. A screen in front of the page says **Version X is available**, with what changed. Click **Update now** (or **Later**).
 2. The app downloads and checks the new version. Your settings, the daily record, QA files and sign-in are kept, and the files it replaces are copied to
    `.update_backup` first. It will not update while a run is in progress.
 3. When it says the version is installed, close the tool window and open the app again.
-4. The next start shows **Updated to vX** with what changed. Click **Got it**.
+4. When the app opens on the new version it shows **Updated to vX** with what changed. Click **Got it**.
 
-At start-up the update happens before the app opens, and Terminal prints "Updating MP Assistance … -> …". If there is no newer version, nothing
+At start-up the update happens before the app opens, and Terminal prints "Updating MP Assistance … -> …"; the **Updated to vX** screen then appears as soon as the app opens. If there is no newer version, nothing
 is shown and the app works as usual.
 
 **For whoever publishes versions:** the app's folder is `hendrikusprinsloo-ux/mp-assistance` on GitHub (public).
-1. Raise `VERSION`, then run `./package.sh`. It writes `MP-Assistance-v<version>.zip`, a copy named `MP-Assistance.zip`, and a `.sha256` file.
-2. On GitHub, create a **release** tagged `v<version>` and write the changes in its description: that is the text people see after updating.
+1. Raise `VERSION`, then run `./package.sh`. It writes `MP-Assistance-v<version>.zip`, a copy named `MP-Assistance.zip`, and a `.sha256` file, next to the app's folder (not inside it).
+   Your settings, daily record, sign-in, QA files and `docs/archive` are left out of the zip.
+2. On GitHub, create a **release** tagged `v<version>` (the same number as `VERSION`) and write the changes in its description: that is the text people see after updating. Publish it as the latest release, not as a draft or pre-release, or the install line and the update check will not see it.
 3. Attach all three files. Without the checksum an update is refused.
 4. Keep write access to the repository to yourself and use two-factor sign-in, because whoever can publish a release changes the app on every computer that updates.
 
@@ -255,8 +260,8 @@ If macOS still blocks it, open **System Settings > Privacy & Security** and clic
 
 | What you see | What to try |
 | --- | --- |
-| Stuck on **Running…** and nothing appears in Chrome | Look at the tool's Chrome window: is it on the sign-in page or an error page? Sign in, or click **Stop** and start again. The Log at the bottom of the tab shows what the tool is doing. |
-| A row you expected is missing | Read the **Left out** line (Mobile App tab) or the Log (Upload tab). Common reasons: not lower than brand, already on the dashboard, already saved today, declined earlier. |
+| Stuck on **Running…** and nothing appears in Chrome | Look at the tool's Chrome window: is it on the sign-in page or an error page? Sign in, or click **Stop** and start again. The **Log** at the bottom of the tab (it starts folded; click its heading) shows what the tool is doing. |
+| A row you expected is missing | Read the **Left out** line (Mobile App tab) or open the **Log** (Upload tab). Common reasons: not lower than brand, already on the dashboard, already saved today, declined earlier. |
 | ⚠ next to a hotel | The base screenshot is not in the same folder as the results CSV. Put the CSV and its screenshots together. |
 | **Save issue** is refused | The message says why: over the limit, the subscription already has an issue on that channel, or the Mobile App slot for the day is taken. |
 | QR popup says it could not reach the link | Click **Check all links** to see which rows fail. A page that is down or has changed its link is the usual reason. |
