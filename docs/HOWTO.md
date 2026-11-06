@@ -22,10 +22,8 @@ screenshots, and checking what was saved. For the full detail see `README.md`.
 
 ## Installing MP Assistance (first time)
 
-You do this once per computer. It takes about two minutes and needs the internet. After it, the app updates itself.
-
-**What you need:** a Mac, Google Chrome, and your Parity Manager and Lighthouse Google sign-ins. Python 3 comes with macOS's command line tools; if the Mac
-offers to install them the first time you run the line below, click **Install** and run the line again afterwards.
+Do this once on each computer, to get the app onto it. It takes about two minutes, and after it the app keeps itself up to date. Signing in and using the app
+start at section 2.
 
 1. Open **Terminal**: press **Cmd + Space**, type `Terminal` and press Return.
 2. Copy this whole line, paste it into Terminal and press Return:
@@ -34,36 +32,33 @@ offers to install them the first time you run the line below, click **Install** 
 cd ~/Downloads && curl -L -o mp.zip "https://github.com/hendrikusprinsloo-ux/mp-assistance/releases/latest/download/MP-Assistance.zip" && unzip -qo mp.zip && open "MP Upload tool/MP Assistance.app"
 ```
 
-3. Wait. The line downloads the app, unpacks it into your **Downloads** folder as `MP Upload tool`, and opens it. The first start sets itself up and
-   takes about ten seconds longer than usual; a Terminal window opens and stays open while the app runs. Do not close it.
-4. Two Chrome windows open: the Parity Manager login and the tool window. **First check Chrome's profile:** in the top-right corner of the Parity Manager
-   window, make sure Chrome is signed in with your Lighthouse Google account (click the icon there and sign in if not). Then sign in to Parity Manager, check the
-   Google account line under the message reads your Lighthouse address, and pick the chain. Section 2 below goes through this screen by screen.
-5. From now on open the app from the same place: double-click **MP Assistance.app** inside the `MP Upload tool` folder. Each time it opens it checks for a newer
-   version and installs it by itself, so there is nothing to download again.
+3. Wait. The line downloads the app, unpacks it into your **Downloads** folder as a folder called `MP Upload tool`, and opens it. The first start sets itself up, so
+   it is slower than later ones. A Terminal window opens and stays open while the app runs; do not close it.
+4. When the app's windows appear, carry on at [section 2](#2-opening-the-app-and-signing-in).
 
-**Choosing where it lives:** you can move the `MP Upload tool` folder somewhere else (for example Documents) **before the first time you open it**. If you move it
-afterwards, delete the hidden `.venv` folder inside it first; the app rebuilds it on the next start. If the first open reports that macOS is not letting
-Terminal use that folder, allow it under System Settings > Privacy & Security > Files and Folders.
+**Next time:** open the app by double-clicking **MP Assistance.app** inside that `MP Upload tool` folder. Each time it opens it installs any new version first, so
+there is nothing to download again. Keep the folder where it is: if you move it, delete the hidden `.venv` folder inside it first and the app rebuilds it.
 
-**Running the line again:** it reinstalls the app code over the same folder and keeps your settings, daily record and sign-in, since those are not in the download.
-It is also the fix if the app folder was deleted or damaged.
+**Running the line again** reinstalls the app over the same folder. Your settings, daily record and sign-in are kept, since they are not part of the download.
+It is also the fix if the folder was deleted or damaged.
 
 **If it does not work**
-- **"curl: could not resolve host" or nothing downloads:** check the internet connection and run the line again.
+- **The Mac offers to install command line tools:** click **Install**, wait for it to finish, then run the line again.
 - **The Mac says the app cannot be opened, is damaged, or nothing happens:** see [If the Mac will not open the app](#if-the-mac-will-not-open-the-app).
-- **"command not found" for `unzip` or `curl`:** these are part of macOS, so check the line was pasted whole, on one line.
+- **"command not found" for `unzip` or `curl`:** the line was probably not pasted whole. Paste it again, as one line.
+- **macOS says Terminal cannot use the folder:** allow it under System Settings > Privacy & Security > Files and Folders, then open the app again.
 - **Anything else:** copy the last lines Terminal printed and send them to whoever looks after the app.
 
 [Back to contents](#mp-assistance-how-to)
 
 ## 1. Before you start
 
-- A Mac with Python 3 and Google Chrome, with the app installed as described in [Installing MP Assistance](#installing-mp-assistance-first-time) above. The app drives your own Chrome, so nothing else is downloaded.
-- The scraper's results file (`results_YYYY-MM-DD_HH-MM-SS.csv`) **together with its screenshots in the same folder**. A results file
+Have these ready each time you work:
+
+- **The app installed** (see [Installing MP Assistance](#installing-mp-assistance-first-time)) and **Google Chrome**. The app drives your own Chrome, so nothing else is downloaded.
+- **The scraper's results file** (`results_YYYY-MM-DD_HH-MM-SS.csv`) **together with its screenshots in the same folder**. A results file
   from a colleague works too, because the tool finds the screenshots by file name next to the CSV.
-- Your Parity Manager sign-in.
-- The first launch needs the internet once to set itself up (about ten seconds). On a Mac the first open may need right-click, Open; if that does not work see [If the Mac will not open the app](#if-the-mac-will-not-open-the-app).
+- **Your sign-ins:** Parity Manager, and the Google account of your Lighthouse login for Chrome (section 2 explains where each goes).
 
 [Back to contents](#mp-assistance-how-to)
 
@@ -82,7 +77,7 @@ It is also the fix if the app folder was deleted or damaged.
    If it shows another address, or says no account, go back to step 3. The app only tells you; it does not stop you continuing.
 5. Closing the tool window stops the app.
 
-The header shows the version (for example `v1.9.2`). **Light mode / Dark mode** switches the theme.
+The header shows the version number next to the app's name. **Light mode / Dark mode** switches the theme.
 
 **Folding sections:** click any section heading (or press Enter on it) to fold it up, and again to open it. The app remembers your choices. **1. Chrome**
 and the **Log** boxes start folded, since they are rarely needed. The Chrome heading still shows "· running" or "· not running", so you can see
@@ -205,16 +200,15 @@ If you restart the app during QA, the tab loads the list again. Your marks are k
   and says so.
 - **Nothing is deleted.** Skipped and saved rows are recorded in `done_<name>.csv`; a re-run skips rows already saved.
 - **Updating:** the app checks for a newer version every time it opens; see [Installing and updating](#installing-and-updating) below.
-  The QR codes need the `segno` package, which `start.command` installs by itself if it is missing (internet needed once).
+  The QR codes need the `segno` package, which `start.command` installs by itself if it is missing.
 
 [Back to contents](#mp-assistance-how-to)
 
 ### Installing and updating
 
-**First install:** see [Installing MP Assistance](#installing-mp-assistance-first-time) at the top. A file downloaded in Terminal is not marked by macOS, which is why
-that route avoids the "cannot be opened" warning; a zip from a browser, AirDrop or Mail needs the steps in [If the Mac will not open the app](#if-the-mac-will-not-open-the-app).
+**First install:** see [Installing MP Assistance](#installing-mp-assistance-first-time) at the top.
 
-**Updating:** every time the app opens it first asks GitHub whether there is a newer version, installs it, and then starts, so you normally do nothing. (This needs the internet and version 1.8 or newer; an older install is offered the update once, as a banner.) If the app was left open for days, a screen offers it:
+**Updating:** every time the app opens it first asks GitHub whether there is a newer version, installs it, and then starts, so you normally do nothing. (This needs version 1.8 or newer; an older install is offered the update once, as a banner.) If the app was left open for days, a screen offers it:
 
 1. A screen in front of the page says **Version X is available**, with what changed. Click **Update now** (or **Later**).
 2. The app downloads and checks the new version. Your settings, the daily record, QA files and sign-in are kept, and the files it replaces are copied to
@@ -222,7 +216,7 @@ that route avoids the "cannot be opened" warning; a zip from a browser, AirDrop 
 3. When it says the version is installed, close the tool window and open the app again.
 4. The next start shows **Updated to vX** with what changed. Click **Got it**.
 
-At start-up the update happens before the app opens, and Terminal prints "Updating MP Assistance … -> …". If there is no internet, or no newer version, nothing
+At start-up the update happens before the app opens, and Terminal prints "Updating MP Assistance … -> …". If there is no newer version, nothing
 is shown and the app works as usual.
 
 **For whoever publishes versions:** the app's folder is `hendrikusprinsloo-ux/mp-assistance` on GitHub (public).
@@ -265,8 +259,8 @@ If macOS still blocks it, open **System Settings > Privacy & Security** and clic
 | A row you expected is missing | Read the **Left out** line (Mobile App tab) or the Log (Upload tab). Common reasons: not lower than brand, already on the dashboard, already saved today, declined earlier. |
 | ⚠ next to a hotel | The base screenshot is not in the same folder as the results CSV. Put the CSV and its screenshots together. |
 | **Save issue** is refused | The message says why: over the limit, the subscription already has an issue on that channel, or the Mobile App slot for the day is taken. |
-| QR popup says it could not reach the link | Check the internet connection, or click **Check all links** to see which rows fail. |
-| QR popup says the QR package is missing | Restart the app so `start.command` can install it (internet needed once), or run `.venv/bin/pip install segno`. |
+| QR popup says it could not reach the link | Click **Check all links** to see which rows fail. A page that is down or has changed its link is the usual reason. |
+| QR popup says the QR package is missing | Restart the app so `start.command` can install it, or run `.venv/bin/pip install segno`. |
 | The dashboard count looks wrong or is marked as this computer's count | The tool could not read the dashboard. Make sure you are signed in to Parity Manager in the tool's Chrome. |
 | The Mac says the app cannot be opened, is damaged, or nothing happens | See [If the Mac will not open the app](#if-the-mac-will-not-open-the-app): run `xattr -dr com.apple.quarantine` on the folder. |
 | The sign-in screen says Chrome is signed in as a non-Lighthouse address, or not signed in to a Google account | Click the profile icon in the top-right corner of the Parity Manager window, sign in with your **Lighthouse Google account** (or switch to it), then click **Check again** on the sign-in screen. Without it, Lighthouse pages such as the Geoinsight screenshots may not open. |
