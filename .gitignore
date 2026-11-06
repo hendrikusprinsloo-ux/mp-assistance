@@ -10,3 +10,4 @@ __pycache__/
 .update_backup/
 .update_done.json
 *.zip
+docs/archive/
