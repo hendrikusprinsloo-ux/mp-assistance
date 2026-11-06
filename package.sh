@@ -9,7 +9,7 @@ case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 rm -f "$OUT"
 cd "$(dirname "$HERE")" || exit 1
 zip -rq "$OUT" "$NAME" \
-  -x "$NAME/.git/*" "$NAME/.gitignore" "$NAME/.venv/*" "$NAME/.browser-profile/*" "$NAME/.claude/*" "$NAME/settings.json" "$NAME/issues_ledger.csv" \
+  -x "$NAME/.git/*" "$NAME/.gitignore" "$NAME/docs/archive/*" "$NAME/.venv/*" "$NAME/.browser-profile/*" "$NAME/.claude/*" "$NAME/settings.json" "$NAME/issues_ledger.csv" \
      "$NAME/qa_from_dashboard/*" \
      "$NAME/server.log" "$NAME/package.sh" "*/__pycache__/*" "*.DS_Store" \
   && echo "Created $OUT (version ${VERSION:-unknown})" \
