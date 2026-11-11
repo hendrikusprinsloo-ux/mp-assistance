@@ -13,6 +13,7 @@ screenshots, and checking what was saved. For the full detail see `README.md`.
 4. [Upload tab: raising web issues](#4-upload-tab-raising-web-issues)
 5. [Mobile App tab: raising app issues from phone screenshots](#5-mobile-app-tab-raising-app-issues-from-phone-screenshots)
 6. [QA tab: checking what was saved](#6-qa-tab-checking-what-was-saved)
+   - [QA Fixes tab: correcting issues marked Problem](#qa-fixes-tab-correcting-issues-marked-problem)
 7. [Good to know](#7-good-to-know)
    - [Installing and updating](#installing-and-updating)
    - [If the Mac will not open the app](#if-the-mac-will-not-open-the-app)
@@ -76,7 +77,12 @@ Have these ready each time you work:
    **Open the login window**; **Check again** looks again straight away). Under its message it shows
    **which Google account the tool's Chrome is signed into**, so you can confirm step 3 worked: it should read "Chrome is signed in as" your Lighthouse address.
    If it shows another address, or says no account, go back to step 3. The app only tells you; it does not stop you continuing.
-5. Closing the tool window stops the app. So does **Quit app** in the top corner, after it asks you to confirm.
+5. After sign-in the app asks **What are you doing today?** Choose **Work on issues** to raise issues (section 3 onwards) or **QA only** to just check issues (section 6).
+   **QA only** hides the Upload and Mobile App tabs and the chain popup, and works out the chain from the QA file you give it. The choice is remembered. The button in the top corner,
+   **Work on issues · change** or **QA only · change**, switches between them.
+6. Closing the tool window stops the app. So does **Quit app** in the top corner, after it asks you to confirm.
+
+When the app starts it first closes any tool Chrome left open from an earlier run, so the windows open cleanly. When it stops it closes the tool's Chrome too, unless the other copy of the app (the testing copy) is using it.
 
 The header shows the version number next to the app's name. **Light mode / Dark mode** switches the theme.
 
@@ -95,7 +101,7 @@ After sign-in a popup asks **which chain you are working on**: Choice (the defau
 - The button in the top corner has two parts: the chain name (`Choice ▾`) reopens the popup, and the count (`34/38 ↗`) opens
   today's dashboard in Parity Manager. The count comes from the dashboard, so it includes everyone's issues.
 - It also has a **web limit for each of Priceline, Booking.com and Expedia** for the chain (0 = no limit for that channel). Choice starts at 4 Priceline, 16 Booking.com and 16 Expedia;
-  Best Western and Wyndham start with none. A channel that is full takes no more issues in a run (the Log says "<channel> limit reached"),
+  Best Western and Wyndham start with none. A channel that is full takes no more issues in a run: the rows past its limit are skipped without asking (see section 4),
   and **Save issue** refuses one for it. The limit line under the header shows each channel's count, for example `Priceline 3/4`.
 - Saving is refused once a limit is used up. A run still loads **every remaining row** of the results file, so you can carry on down it after declining
   an issue; **Save issue** is what enforces the limits.
@@ -124,7 +130,7 @@ The app always opens on this tab.
 5. Check the card, then click one of:
    - **Save issue**: clicks Parity Manager's Save. The tool first re-checks the dashboard and refuses, with a reason, if the save would
      go over the limit or double up an existing issue.
-   - **Decline**: use it for an issue that should not be raised, for example one that cannot be confirmed. Type a reason in the box next to it
+   - **Decline**: use it for an issue that should not be raised, for example one that cannot be confirmed. Declining (or skipping) an issue frees its place, so the next row of that channel is shown. Type a reason in the box next to it
      first if you like. The issue is recorded in the done file as `declined` with your note, and it **does not come back**: not in later runs,
      not on the Mobile App tab and not in QA.
    - **Stop run**: stops after leaving the current issue unsaved.
@@ -134,6 +140,10 @@ Which rows are processed: `status` and `branddotcom_status` both `ok`, and the c
 hotel and channel already have an issue today (on the dashboard, saved here, or earlier in the file). The **Log** at the bottom
 says how many rows were skipped and why, for example "not lower than brand" or "already on the dashboard". When the run ends it prints a summary
 of how many issues were saved and declined. Each new issue's screenshots start at the top.
+
+**Rows past a channel's limit are left out for you.** A run does not show rows once their channel is full, so you never have to Decline them. For example, with 18 Expedia rows and a limit of 16, the 17th and 18th Expedia rows
+are never shown. These rows are not written to the done file, so they stay available on the Mobile App tab (a Decline, by contrast, is recorded and never comes back). When the run ends the Log says how many rows were left out and that
+they are still available for Mobile App.
 
 **Default runs folder:** under *2. Results CSV*, click **Set default runs folder…** and pick the folder that holds your run folders (for example
 `parity_scraper_screenshots`). Each time the app starts it loads the newest `results_….csv` in it, chosen by the time in the file name.
@@ -180,7 +190,8 @@ The QA tab checks that the values on the issues themselves match the Lighthouse 
 1. Open the **QA** tab. It loads **today's confirmed issues for the chosen chain** from the dashboard by itself. (**Load from the dashboard**
    reloads the list.)
 2. Optional: if a colleague has already QAed some of them, click **Skip issues from a QA cache…** and choose their `qa-cache_….csv`
-   (you can add several). Issues they marked **Looks right** are left out; ones marked **Problem** stay in. A line shows how many were skipped.
+   (you can add several) or their `COMPLETED_qa_….csv`. Issues they marked **Looks right** are left out; ones marked **Problem** stay in. A line shows how many were skipped.
+   To look at only some issues, click **Only these issues…** and choose a QA file: the tab then lists just the issues in it. Use this to recheck the Problems you exported from the QA Fixes tab.
 3. Step through the issues with **‹** and **›**; the page glides smoothly to the top of each issue's card. For each one:
    - The table lists the issue's own values, read from Parity Manager in the background: subscription id, arrival date, channel, platform,
      base and channel rate, and both cancellations.
@@ -197,11 +208,32 @@ If you restart the app during QA, the tab loads the list again. Your marks are k
 
 [Back to contents](#mp-assistance-how-to)
 
+### QA Fixes tab: correcting issues marked Problem
+
+Use the **QA Fixes** tab for issues you marked **Problem**. It changes the real issue in Parity Manager, so check before you apply.
+
+1. **1. The Problem issues:** click **Choose a QA file…** and pick a `qa-cache_….csv` or a `COMPLETED_qa_….csv`, or click **Use today's QA** for today's QA of the chosen chain. The Problems are listed below. If you want to retake a screenshot,
+   also click **Choose the day's results file…**: it holds the brand and channel page links.
+2. Pick an issue from the list. **2. Fix the issue** shows its current values and the two Lighthouse screenshots.
+3. Change what is wrong, leaving the rest as it is:
+   - **Base shop rate** or **Channel shop rate**: type the right number.
+   - **Base cancellation** or **Channel cancellation**: choose **Ticked** or **Not ticked**.
+   - **Base platform** or **Channel platform**: choose Desktop, Mobile Web or Mobile App.
+   - **Screenshots**: click **Choose a new image…** under either screenshot to replace it.
+4. **Open brand page**, **Open channel page** and **Open Geoinsight page** open those pages in your everyday Chrome, so you can look closer or take a new screenshot. A note on the fix is optional.
+5. Click **Apply the changes** (it shows how many changes). The app asks you to confirm, then saves to the real issue. The fixed issue goes back to unchecked on the QA tab and is removed from your QA cache, so it cannot be skipped by mistake.
+6. **Export fixed Problems** saves `qa-problems_<chain>_<date>.csv` with the issues you fixed (tick **include the ones not fixed yet** to put every Problem in it). It is also saved by itself when the last Problem is fixed.
+   On the QA tab, load it with **Only these issues…** to check the fixes.
+
+[Back to contents](#mp-assistance-how-to)
+
 ## 7. Good to know
 
 - **One issue per channel per subscription.** Parity Manager takes only one for a hotel on a channel. The same hotel on a different channel is fine.
 - **The dashboard is the record** of what is confirmed. If it cannot be read, the tool falls back to its own note of what this computer saved today
   and says so.
+- **File windows open one at a time.** When you click a button that opens a Finder window (such as **Choose file…**), the buttons that can open one are switched off until it is done, and a second click is ignored. If you do not see the window,
+  check Finder or press Cmd + Tab, then finish or cancel it.
 - **Nothing is deleted.** Skipped and saved rows are recorded in `done_<name>.csv`; a re-run skips rows already saved.
 - **Updating:** the app checks for a newer version every time it opens; see [Installing and updating](#installing-and-updating) below.
   The QR codes need the `segno` package, which `start.command` installs by itself if it is missing.
@@ -269,6 +301,7 @@ If macOS still blocks it, open **System Settings > Privacy & Security** and clic
 | The dashboard count looks wrong or is marked as this computer's count | The tool could not read the dashboard. Make sure you are signed in to Parity Manager in the tool's Chrome. |
 | The Mac says the app cannot be opened, is damaged, or nothing happens | See [If the Mac will not open the app](#if-the-mac-will-not-open-the-app): run `xattr -dr com.apple.quarantine` on the folder. |
 | The sign-in screen says Chrome is signed in as a non-Lighthouse address, or not signed in to a Google account | Click the profile icon in the top-right corner of the Parity Manager window, sign in with your **Lighthouse Google account** (or switch to it), then click **Check again** on the sign-in screen. Without it, Lighthouse pages such as the Geoinsight screenshots may not open. |
+| "A file window is already open" or **Waiting for the file window…** stays on screen | Look for the window in Finder (or press Cmd + Tab) and finish or cancel it. It can take a few seconds to appear. |
 | An update does not seem to apply | Quit the app (close the tool window) and open it again. |
 
 [Back to contents](#mp-assistance-how-to)
