@@ -101,7 +101,7 @@ After sign-in a popup asks **which chain you are working on**: Choice (the defau
 - The button in the top corner has two parts: the chain name (`Choice ▾`) reopens the popup, and the count (`34/38 ↗`) opens
   today's dashboard in Parity Manager. The count comes from the dashboard, so it includes everyone's issues.
 - It also has a **web limit for each of Priceline, Booking.com and Expedia** for the chain (0 = no limit for that channel). Choice starts at 4 Priceline, 16 Booking.com and 16 Expedia;
-  Best Western and Wyndham start with none. A channel that is full takes no more issues in a run: the rows past its limit are skipped without asking (see section 4),
+  Best Western and Wyndham start with none. A channel that is full takes no more issues in a run: the rows past its limit are skipped without asking and listed in `left_out_<results name>.csv` (see section 4),
   and **Save issue** refuses one for it. The limit line under the header shows each channel's count, for example `Priceline 3/4`.
 - Saving is refused once a limit is used up. A run still loads **every remaining row** of the results file, so you can carry on down it after declining
   an issue; **Save issue** is what enforces the limits.
@@ -142,8 +142,9 @@ says how many rows were skipped and why, for example "not lower than brand" or "
 of how many issues were saved and declined. Each new issue's screenshots start at the top.
 
 **Rows past a channel's limit are left out for you.** A run does not show rows once their channel is full, so you never have to Decline them. For example, with 18 Expedia rows and a limit of 16, the 17th and 18th Expedia rows
-are never shown. These rows are not written to the done file, so they stay available on the Mobile App tab (a Decline, by contrast, is recorded and never comes back). When the run ends the Log says how many rows were left out and that
-they are still available for Mobile App.
+are never shown. These rows are not written to the done file, so they stay available on the Mobile App tab (a Decline, by contrast, is recorded and never comes back). When the run ends the Log says how many rows were left out, that they are still available for Mobile App, and the name of the file that lists them.
+That file is `left_out_<results name>.csv`, saved next to the results file. It has one line for every row that was left out, with the time, the channel, the brand code, the arrival date, the subscription id, the hotel name, the client and the reason
+(for example that the channel was full for today). It is not a done file, so it does not stop those rows coming back on the Mobile App tab.
 
 **Default runs folder:** under *2. Results CSV*, click **Set default runs folder…** and pick the folder that holds your run folders (for example
 `parity_scraper_screenshots`). Each time the app starts it loads the newest `results_….csv` in it, chosen by the time in the file name.
