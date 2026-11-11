@@ -335,6 +335,48 @@ def attach_files(page, plan):
     page.set_input_files("#id_channel_screenshot", plan["channel_screenshot"])
 
 
+LEFT_OUT_FIELDS = ["timestamp", "key", "OTA_name", "brand_code", "from_date", "subscription_id", "hotel_name", "client", "reason"]
+
+
+def left_out_path(csv_path):
+    """Where the rows a full channel left out are listed: left_out_<results name>.csv next to the results file. It is not a done file and does not start
+    with results_, so Mobile App (which hides what a done file holds) and the results pickers never read it."""
+    return Path(csv_path).with_name(f"left_out_{Path(csv_path).stem}.csv")
+
+
+def record_left_out(csv_path, row, client, why):
+    """Add one left-out row to that list, with a header the first time. This is a record for people only: nothing reads it back."""
+    path = left_out_path(csv_path)
+    new = not path.exists() or path.stat().st_size == 0
+    with open(path, "a", newline="", encoding="utf-8-sig" if new else "utf-8") as f:
+        w = csv.DictWriter(f, LEFT_OUT_FIELDS)
+        if new:
+            w.writeheader()
+        w.writerow({"timestamp": datetime.now().isoformat(timespec="seconds"), "key": row_key(row), "OTA_name": row["OTA_name"],
+                    "brand_code": row["brand_code"], "from_date": row["from_date"], "subscription_id": subscription_id(row),
+                    "hotel_name": row["hotel_name"], "client": client, "reason": why})
+
+
+class ChannelRoom:
+    """How many more issues each channel may take today. A save uses one up; a decline or a skip does not, so it frees the place for the next row.
+    A channel with no limit set is never full. Rows of a full channel are left out of the run without being written to the done file, so they
+    stay free for Mobile App."""
+
+    def __init__(self, room):
+        self.left = dict(room or {})
+        self.left_out = {}
+
+    def full(self, channel):
+        return channel in self.left and self.left[channel] <= 0
+
+    def leave_out(self, channel):
+        self.left_out[channel] = self.left_out.get(channel, 0) + 1
+
+    def saved(self, channel):
+        if channel in self.left:
+            self.left[channel] -= 1
+
+
 def wait_for_review(page, info, plan):
     """Return 'saved' once the form is saved (by clicking Save in the browser, or by the save command), 's' to skip,
     ('declined', note) when the issue is declined, 'q' to stop."""
@@ -412,6 +454,7 @@ def main():
     ap.add_argument("--start", type=int, default=1, help="skip the first N-1 eligible rows")
     ap.add_argument("--existing", type=Path, help="JSON list of [subscription id, channel] pairs that already have an issue today; rows for them are skipped")
     ap.add_argument("--channel-room", help="JSON {channel: how many more issues it may take today}; rows past it are skipped")
+    ap.add_argument("--extras-after", help="JSON {channel: n}: load only the rows past each channel's first n eligible rows (the extra issues beyond its limit)")
     ap.add_argument("--platform", choices=("web", "app"), default="web", help="web = Mobile Web issues (default), app = Mobile App")
     ap.add_argument("--app-inputs", type=Path, help="JSON file with each Mobile App row's phone screenshot and typed rate")
     args = ap.parse_args()
@@ -433,10 +476,17 @@ def main():
     reasons = {}
     room = json.loads(args.channel_room) if args.channel_room and not app else {}
     taken_by_channel = {}
+    extras_after = json.loads(args.extras_after) if args.extras_after and not app else {}
+    position = {}
     for row_no, row in load_rows(args.csv):
         plan, problems = plan_for(row, args.platform, app_inputs.get(row_key(row)))
+        if plan is not None and extras_after:       # extras only: the first n rows of a channel (done or not) are the ones within its limit
+            ch = row["OTA_name"].strip().lower()
+            position[ch] = position.get(ch, 0) + 1
+            if ch not in extras_after or position[ch] <= extras_after[ch]:
+                plan, problems = None, None
         if plan is None:
-            why = skip_reason(problems)
+            why = skip_reason(problems) if problems is not None else "within the channel's limit (extras only)"
             reasons[why] = reasons.get(why, 0) + 1
         if plan is not None and row_key(row) + suffix not in already:
             channel = row["OTA_name"].strip().lower()
@@ -444,7 +494,7 @@ def main():
             if pair in existing or (row["brand_code"].strip().lower(), channel) in ledger_pairs or pair in seen:
                 duplicates += 1
                 plan = None
-            elif channel in room and taken_by_channel.get(channel, 0) >= room[channel]:
+            elif args.dry_run and channel in room and taken_by_channel.get(channel, 0) >= room[channel]:
                 reasons[f"{channel} limit reached"] = reasons.get(f"{channel} limit reached", 0) + 1
                 plan = None
             else:
@@ -497,10 +547,19 @@ def main():
         print("Using the tool's Chrome; the form opens in a new tab.")
 
         start_command_reader()
-        for n, (row_no, row, plan, problems) in enumerate(todo, 1):
+        channels = ChannelRoom({} if app else room)
+        shown = 0
+        for row_no, row, plan, problems in todo:
+            channel_now = row["OTA_name"].strip().lower()
+            if channels.full(channel_now):
+                channels.leave_out(channel_now)                  # skipped, not declined: not in the done file, so it is still free for Mobile App
+                record_left_out(args.csv, row, args.client, f"{channel_now} was full for today")      # but listed in left_out_<name>.csv, for people
+                continue
+            shown += 1
+            n = shown
             print(f"\n[{n}/{len(todo)}] row {row_no}  {row['hotel_name']}  [{row['OTA_name']}]" + ("  (Mobile App)" if app else ""))
             issue_id = ""
-            info = {"n": n, "total": len(todo), "hotel": row["hotel_name"], "channel": row["OTA_name"], "brand_code": row["brand_code"],
+            info = {"n": n, "total": max(len(todo) - sum(channels.left_out.values()), n), "hotel": row["hotel_name"], "channel": row["OTA_name"], "brand_code": row["brand_code"],
                     "subscription_id": subscription_id(row),
                     "platform": args.platform, "problems": problems,
                     "expected": {"base_rate": plan["base_shop_rate"], "channel_rate": plan["channel_shop_rate"],
@@ -535,6 +594,7 @@ def main():
                     issue_id = find_issue_id(page)
                 emit(info, outcome, values=values)   # the last values stay on screen while the next issue loads
             if outcome == "saved":
+                channels.saved(channel_now)
                 ledger_append({"date": today(), "timestamp": datetime.now().isoformat(timespec="seconds"), "chain": args.client,
                                "platform": args.platform, "channel": row["OTA_name"], "brand_code": row["brand_code"],
                                "key": row_key(row) + suffix, "issue_id": issue_id, "results_file": args.csv.name,
@@ -551,6 +611,9 @@ def main():
             print(f"  {outcome}")
         if len(ctx.pages) > 1:
             page.close()  # do not leave a tab behind for every run
+    for ch, n in sorted(channels.left_out.items()):
+        print(f"{n} {ch} row{'s' if n != 1 else ''} left out because {ch} is full for today; still available for Mobile App "
+              f"(listed in {left_out_path(args.csv).name})")
     try:
         counts = {}
         for r in read_log(log_path):
