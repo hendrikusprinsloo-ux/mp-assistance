@@ -96,6 +96,7 @@
   .qr-url { word-break: break-all; font-size: 12px; max-width: 420px; user-select: all; }
   button.link { border: none; color: var(--sub); text-decoration: underline; padding: 8px 6px; }
   #ignoreBtn.on { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+  .badge { margin-left: 12px; padding: 3px 10px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
   #log, #appLog { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font: 12.5px/1.5 ui-monospace, Menlo, monospace;
             padding: 12px 14px; border-radius: 6px; height: 200px; overflow: auto; white-space: pre-wrap; margin: 0; }
   #appTable input[type=text] { width: 90px; }
@@ -136,6 +137,17 @@
   </div>
 </div>
 
+<div id="modeGate" class="gate" hidden>
+  <div class="gate-card" style="min-width:420px">
+    <h2>What are you doing today?</h2>
+    <p style="margin:0 0 10px">Raising issues needs a chain and its daily limits. Checking issues (QA) does not: it works out the chain from the QA file you give it.</p>
+    <div class="actions">
+      <button class="primary" id="modeWork">Work on issues</button>
+      <button id="modeQa">QA only</button>
+    </div>
+    <div class="hint" id="modeMsg">Your choice is remembered; Change it any time with the button in the top corner.</div>
+  </div>
+</div>
 <div id="chainGate" class="gate" hidden>
   <div class="gate-card" style="min-width:540px">
     <h2>Which chain are you working on?</h2>
@@ -189,7 +201,7 @@
 </div>
 
 <main>
-  <div class="actions" style="margin:0 0 18px"><h1>MP Assistance</h1><span class="hint" id="versionTag" style="margin:0 0 0 8px"></span><span class="spacer"></span><span class="btn-group"><button id="chainBtn" title="Change the chain or its limits">Chain</button><button id="dashBtn" disabled title="Choose a chain first">–</button></span><button id="ignoreBtn" title="Let runs and saves go past the daily limits (for a demo). Starts off every time the app starts.">Ignore limits: off</button><button id="themeBtn" title="Switch between dark and light mode"></button><button id="quitAppBtn">Quit app</button></div>
+  <div class="actions" style="margin:0 0 18px"><h1>MP Assistance</h1><span class="hint" id="versionTag" style="margin:0 0 0 8px"></span><span class="spacer"></span><span class="btn-group"><button id="chainBtn" title="Change the chain or its limits">Chain</button><button id="dashBtn" disabled title="Choose a chain first">–</button></span><button id="ignoreBtn" title="Let runs and saves go past the daily limits (for a demo). Starts off every time the app starts.">Ignore limits: off</button><button id="modeBtn" title="Switch between working on issues and QA only"></button><button id="themeBtn" title="Switch between dark and light mode"></button><button id="quitAppBtn">Quit app</button></div>
 
   <div id="updNotes" class="gate" hidden>
     <div class="gate-card" style="min-width:420px;max-width:560px">
@@ -208,6 +220,7 @@
     <button class="tab" id="tabUpload">Upload</button>
     <button class="tab" id="tabApp" hidden>Mobile App</button>
     <button class="tab" id="tabQa">QA</button>
+    <button class="tab" id="tabFix">QA Fixes</button>
   </nav>
 
   <div id="panelUpload">
@@ -233,12 +246,14 @@
       <button id="latestBtn" title="Load the newest results file from the default folder" disabled>Load latest results</button>
       <span id="folderName" class="hint" style="margin:0;word-break:break-all">No default folder: choose a file above</span>
     </div>
+    <div id="ratesNote" class="hint" style="margin:6px 0 0" hidden></div>
     <div class="row">
       <label><input type="checkbox" id="dryRun"> Dry run (preview only)</label>
       <label>Limit rows <input type="number" id="limit" min="1" placeholder="all remaining"></label>
     </div>
     <div class="actions">
       <button class="primary" id="runBtn">Start</button>
+      <button id="extrasBtn" title="Load only the issues past each channel's limit (for example the 17th to 20th Expedia row), skipping the ones within it">Start with extra issues only</button>
       <button id="stopBtn" disabled>Stop</button>
       <span id="runState" class="hint" style="margin:0"></span>
       <span id="limitLine" class="hint" style="margin:0"></span>
@@ -254,6 +269,14 @@
     <div id="uRun"></div>
   </section>
 
+  <section>
+    <h2>4. Quality Assurance</h2>
+    <div class="actions" style="margin:0">
+      <button id="goQaBtn" disabled>Go to QA →</button>
+      <span id="goQaNote" class="hint" style="margin:0">Choose a results CSV first.</span>
+    </div>
+    <div class="hint">Opens the QA tab on the file chosen above, to check the saved issues one at a time.</div>
+  </section>
 
   <section>
     <h2>Log</h2>
@@ -310,13 +333,16 @@
   <section>
     <h2>Review</h2>
     <div class="actions" style="margin:0 0 10px">
+      <button id="qaPickBtn">Choose done file…</button>
+      <button id="qaFollowBtn" title="Use the file chosen on the Upload tab">Use the Upload file</button>
       <button id="qaDashBtn" title="Pull today's confirmed issues for the chosen chain from the Mobile Parity dashboard">Load from the dashboard</button>
+      <button id="qaOnlyBtn" title="Recheck: list only the issues in a QA file, for example the Problems exported from QA Fixes">Only these issues…</button>
       <button id="qaSkipBtn" title="Leave out issues already marked OK in a QA cache file someone gave you">Skip issues from a QA cache…</button>
       <span id="qaCsv" class="hint" style="margin:0;word-break:break-all">none chosen</span>
     </div>
     <div id="qaSkipMsg" class="hint" style="margin:0 0 10px" hidden></div>
     <input type="hidden" id="qaCsvPath">
-    <div class="hint" style="margin:0 0 10px">Opening this tab loads the issues Parity Manager has confirmed today for the chosen chain. Their values are read from the issues themselves; check them against the Lighthouse screenshots and mark each <b>Looks right</b> or <b>Problem</b>. To leave out issues a colleague has already QAed, use <b>Skip issues from a QA cache…</b> and choose their <code>qa-cache_….csv</code>.</div>
+    <div class="hint" style="margin:0 0 10px">Choose the <b>done file</b> of a run (<code>done_….csv</code>), including one sent to you by someone else. It holds the issue links, so the issues and Lighthouse screenshots load from Parity Manager as long as you are signed in there. You can also choose a results CSV and its done file is found next to it. Each file loaded here starts a <b>fresh</b> QA: marks from an earlier QA of it are set aside, renamed with a timestamp. This does not change the file on the Upload tab.<br><b>Load from the dashboard</b> instead pulls the issues Parity Manager has confirmed today for the chosen chain (the subscription links carry the issue ids). Their values are read from the issues themselves, and you confirm they match the Lighthouse screenshots.</div>
     <div id="revEmpty" class="hint" style="margin:0"></div>
     <div id="revCard" hidden>
       <div class="actions" style="margin:0 0 10px">
@@ -362,6 +388,57 @@
     <div class="hint">Lists every saved issue with the values entered, the issue link, the field check and your QA result and note. It is kept up to date next to the done file as <code>qa_&lt;name&gt;.csv</code> while issues remain, and becomes <code>COMPLETED_qa_&lt;name&gt;.csv</code> once every issue is marked <b>Looks right</b> or <b>Problem</b>. The download unlocks at that point.</div>
   </section>
   </div>
+
+  <div id="panelFix" hidden>
+  <section id="fixFilesSection">
+    <h2>1. The Problem issues</h2>
+    <div class="actions" style="margin:0 0 10px">
+      <button id="fixPickBtn" title="A qa-cache_….csv or a COMPLETED_qa_….csv that has issues marked Problem">Choose a QA file…</button>
+      <button id="fixMineBtn" title="Use today's QA cache for the chain chosen, from the QA tab">Use today's QA</button>
+      <button id="fixClearBtn">Clear</button>
+      <span id="fixFiles" class="hint" style="margin:0;word-break:break-all">none chosen</span>
+    </div>
+    <div id="fixMsg" class="hint" style="margin:0 0 6px"></div>
+    <div class="actions" style="margin:0 0 6px">
+      <button id="fixExportBtn" disabled title="Save the fixed Problem issues as their own file, to recheck on the QA tab with Only these issues">Export fixed Problems</button>
+      <label style="display:inline-flex;gap:6px;align-items:center;margin:0;font-weight:400"><input type="checkbox" id="fixExportAll"> include the ones not fixed yet</label>
+      <span id="fixExportMsg" class="hint" style="margin:0"></span>
+    </div>
+    <div class="actions" style="margin:0 0 6px">
+      <button id="fixResultsBtn" title="The day's results file: it holds the brand and channel page links used to retake a screenshot">Choose the day's results file…</button>
+      <span id="fixResults" class="hint" style="margin:0;word-break:break-all">none chosen</span>
+    </div>
+    <table id="fixList" style="margin-top:8px"></table>
+  </section>
+
+  <section id="fixEditSection">
+    <h2>2. Fix the issue</h2>
+    <div id="fixEmpty" class="hint" style="margin:0">Choose a QA file above, then pick an issue from the list.</div>
+    <div id="fixCard" hidden>
+      <div class="actions" style="margin:0 0 10px">
+        <strong id="fixTitle"></strong><span class="spacer"></span><span id="fixStatus" class="hint" style="margin:0"></span>
+      </div>
+      <div id="fixProblemNote" class="hint" style="margin:0 0 10px"></div>
+      <table id="fixFields"></table>
+      <div id="fixShotsMsg" class="hint"></div>
+      <div class="shots">
+        <figure><figcaption id="fixCapBase">Base screenshot (brand.com)</figcaption><div class="imgbox"><img id="fixImgBase" alt="Base screenshot"></div>
+          <div class="actions"><button id="fixShotBase">Choose a new image…</button><button id="fixOpenBrand" title="Open the brand.com page in your everyday Chrome">Open brand page</button><span id="fixShotBaseName" class="hint" style="margin:0"></span></div></figure>
+        <figure><figcaption id="fixCapChannel">Channel screenshot</figcaption><div class="imgbox"><img id="fixImgChannel" alt="Channel screenshot"></div>
+          <div class="actions"><button id="fixShotChannel">Choose a new image…</button><button id="fixOpenChannel" title="Open the channel page in your everyday Chrome">Open channel page</button><span id="fixShotChannelName" class="hint" style="margin:0"></span></div></figure>
+      </div>
+      <div class="actions">
+        <button id="fixOpenGeo" title="Open the Geoinsight page in your everyday Chrome">Open Geoinsight page</button>
+        <span id="fixLinksMsg" class="hint" style="margin:0"></span>
+      </div>
+      <div class="actions">
+        <button class="primary" id="fixApply" disabled>Apply the changes</button>
+        <input type="text" id="fixNote" placeholder="Note on the fix (optional)" style="flex:1;min-width:200px">
+      </div>
+      <div id="fixResultMsg" class="hint"></div>
+    </div>
+  </section>
+  </div>
 </main>
 
 <script>
@@ -370,6 +447,7 @@ let since = 0;
 let wasRunning = false, lastCountPoll = 0;
 let runsFolder = "", serverStart = 0;
 let chains = [], savedChain = "", appChain = "", sfAccounts = {}, chain = "", limits = null, popupLimits = null, settingsReady = null;
+let qaOnly = false, qaChain = "";          // QA-only mode: no chain is chosen; the QA tab detects it from the QA file given
 let revItems = [], revIdx = 0, revResults = {}, revCsv = "", shownKey = "";
 const qaCsvValue = () => $("qaCsvPath").value;     // the QA tab's own file; the Upload tab keeps #csvSelect
 
@@ -391,6 +469,26 @@ async function api(path, body) {
 }
 const fail = e => alert(e.message);
 
+/* The file window is slow to appear. While one is open, every button that can open one is disabled (and clicks are ignored), so it
+   cannot be opened twice. The server also refuses a second one. `body` is the part that asks the server to open it. */
+let dialogOpen = false;
+const DIALOG_BTNS = "#pickBtn, #folderBtn, #appPickBtn, #qaPickBtn, #qaSkipBtn, #qaOnlyBtn, #fixPickBtn, #fixResultsBtn, #fixShotBase, #fixShotChannel, #appTable button[data-dialog]";
+async function withDialog(label, body) {
+  if (dialogOpen) return;                                   // a click while one is already opening: ignored
+  dialogOpen = true;
+  const held = [...document.querySelectorAll(DIALOG_BTNS)].filter(b => !b.disabled);
+  held.forEach(b => { b.disabled = true; });
+  const say = document.getElementById(label);               // a short "Waiting…" note where the person is looking, if one is given
+  const was = say ? say.textContent : "";
+  if (say) say.textContent = "Waiting for the file window… (it can take a few seconds; check Finder if you do not see it)";
+  try { return await body(); }
+  finally {
+    dialogOpen = false;
+    held.forEach(b => { if (b.isConnected) b.disabled = false; });
+    if (say && say.textContent.startsWith("Waiting for the file window")) say.textContent = was;
+  }
+}
+
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("mpTheme", theme);
@@ -409,10 +507,26 @@ function renderCsvName() {
   $("csvName").title = path;
 }
 
+async function checkRates(path) {
+  const note = $("ratesNote"); note.hidden = true;
+  if (!path) return;
+  let r; try { r = await api("/api/rates/check?csv=" + enc(path)); } catch (e) { return; }
+  if ($("csvSelect").value !== path || r.error) return;                      // moved on to another file meanwhile
+  const names = r.would_confirm.map(c => `${c.hotel} (${c.channel}, ${c.file_diff} → ${c.new_diff})`);
+  const lost = (r.no_longer || []).map(c => `${c.hotel} (${c.channel})`);
+  if (!names.length && !lost.length) return;
+  note.hidden = false; note.className = "hint problem";
+  note.textContent = (names.length ? `${names.length} row${names.length === 1 ? "" : "s"} the file calls not an issue ${names.length === 1 ? "is" : "are"} more than 2 below brand once the cents are counted: ${names.join("; ")}. ` : "")
+    + (lost.length ? `${lost.length} row${lost.length === 1 ? "" : "s"} the file calls an issue ${lost.length === 1 ? "is" : "are"} 2 or less below brand once the cents are counted: ${lost.join("; ")}. ` : "")
+    + "A warning only: runs follow the file's own labels.";
+}
+
 function setCsv(path) {
   $("csvSelect").value = path;
   try { localStorage.setItem("mpCsv", path); } catch (e) { /* storage off: the file is just not remembered */ }
   renderCsvName();
+  checkRates(path);
+  refreshGoQa().catch(() => {});
 }
 /* ---- default runs folder: on a fresh start of the app the newest results file in it is loaded; a page reload keeps the file in use ---- */
 function renderFolder(run) {
@@ -438,14 +552,14 @@ async function startupCsv() {
   if (runsFolder && fresh && !$("csvSelect").value && await loadLatest(true)) return;
   await restoreCsv();
 }
-$("folderBtn").onclick = async () => {
+$("folderBtn").onclick = () => withDialog("folderName", async () => {
   try {
     const r = await api("/api/pick", { kind: "folder" });
     if (r.cancelled) return;
     await api("/api/runs/folder", { folder: r.path });
     await loadLatest(false);
   } catch (e) { fail(e); }
-};
+});
 $("latestBtn").onclick = () => loadLatest(false);
 // The chosen file is remembered, so a reload of the page (or a second tool window) does not leave the Upload tab empty
 async function restoreCsv() {
@@ -456,25 +570,33 @@ async function restoreCsv() {
   } catch (e) { return; }
   if (!$("csvSelect").value) setCsv(saved);
 }
-$("pickBtn").onclick = async () => {
-  $("pickBtn").disabled = true; $("csvName").textContent = "Waiting for the file dialog…";
+$("pickBtn").onclick = () => withDialog(null, async () => {
+  $("csvName").textContent = "Waiting for the file window… (it can take a few seconds; check Finder if you do not see it)";
   try {
     const r = await api("/api/pick", {});
     if (r.cancelled) renderCsvName(); else setCsv(r.path);     // cancelling must leave both tabs' files alone
   } catch (e) { renderCsvName(); fail(e); }
-  $("pickBtn").disabled = false;
-};
+});
 
 async function loadSettings() {
   const s = await api("/api/settings");
   chains = s.chains; savedChain = s.chain; appChain = s.app_chain; sfAccounts = s.sf_accounts;
   $("versionTag").textContent = s.version ? "v" + s.version : "";
-  runsFolder = s.runs_folder || ""; serverStart = s.started || 0;
   applyTheme(s.theme);
   // windows are only arranged when the user clicks Arrange windows
 }
 
 const REVIEW_MARK = { ok: ["✓", "good"], problem: ["✗", "problem"], "": ["–", ""] };
+
+// The Go to QA button shows how many issues the chosen file has saved so far (live while a run is going)
+async function refreshGoQa() {
+  const csv = $("csvSelect").value, btn = $("goQaBtn");
+  btn.disabled = !csv;
+  if (!csv) { $("goQaNote").textContent = "Choose a results CSV first."; btn.classList.remove("primary"); return; }
+  const n = (await api("/api/review/items?csv=" + enc(csv))).items.length;
+  $("goQaNote").textContent = n ? `${n} saved issue${n === 1 ? "" : "s"} to check` : "No saved issues for this file yet.";
+  btn.classList.toggle("primary", n > 0);
+}
 
 /* ---- review one by one ---- */
 // Lighthouse's own screenshots, read from the issue's Geoinsight page (they match what was uploaded)
@@ -541,8 +663,8 @@ function renderReview(full) {
   const n = revItems.length, item = revItems[revIdx];
   $("revEmpty").hidden = !!item; $("revCard").hidden = !item;
   $("revEmpty").textContent = qaCsvValue()
-    ? "No issues to QA for this chain today."
-    : "Loading today's issues for the chosen chain…";
+    ? "No saved issues found for this file: there is no done log with saved issues next to it."
+    : "Choose a results CSV above, or run one on the Upload tab and come back here.";
   $("revCount").textContent = n ? `${revItems.filter(i => i.review).length} of ${n} reviewed` : "";
   updateQaReport();
   if (!item) { clearShots(); shownKey = ""; return; }
@@ -794,6 +916,7 @@ async function loadApp() {
   const csv = $("appCsvPath").value || $("csvSelect").value;   // the Upload file unless one is chosen here
   if (csv && !$("appCsvPath").value) { $("appCsvPath").value = csv; $("appCsvName").textContent = appLabel(csv); }
   appData = await api(`/api/app/eligible?csv=${enc(csv)}&chain=${enc(chain)}`);
+  for (const row of appData.rows) if (row.key in pendingCancel) row.cancellation = pendingCancel[row.key];
   renderApp();
 }
 
@@ -802,6 +925,17 @@ function appReady() { return appData ? appData.rows.filter(r => r.shot && r.rate
 let appSig = "";
 function appSignature() {            // everything the table draws; the page's timers re-render often and must not rebuild it for nothing
   return JSON.stringify([appData && appData.rows, appData && appData.allowed, appData && appData.used, linkChecks, wasRunning]);
+}
+const pendingCancel = {};       // key -> value picked and still being saved: a fresh list from the server must not undo it
+function refreshAppReady() {    // the ready count and the row's tick follow the pick without redrawing the dropdowns under the person's hand
+  renderAppSummary();
+  const ready = appReady();
+  $("appRun").textContent = ready.length ? `Upload ${ready.length} ready issue${ready.length === 1 ? "" : "s"}` : "Upload ready issues";
+  $("appRun").disabled = !ready.length || wasRunning;
+  document.querySelectorAll("#appTable select").forEach(sel => {
+    const row = appData && appData.rows.find(x => x.key === sel.dataset.key); if (!row) return;
+    const mark = sel.closest("tr").querySelector("td.good"); if (mark) mark.textContent = row.shot && row.rate && row.cancellation ? "✓" : "";
+  });
 }
 function renderApp(force) {
   const sig = appSignature();
@@ -868,11 +1002,12 @@ function drawAppTable(typed = {}) {
     tr.insertCell().appendChild(qrBtn);
     const shotBtn = document.createElement("button");
     shotBtn.textContent = r.shot ? `✓ ${r.shot_name || "chosen"} (change)` : "Choose phone screenshot…";
-    shotBtn.onclick = async () => {
-      shotBtn.disabled = true; shotBtn.textContent = "Waiting for the file dialog…";
+    shotBtn.dataset.dialog = "1";
+    shotBtn.onclick = () => withDialog(null, async () => {
+      shotBtn.textContent = "Waiting for the file window…";
       try { await api("/api/app/shot", { csv: $("appCsvPath").value, chain, key: r.key }); } catch (e) { fail(e); }
       loadApp().catch(fail);
-    };
+    });
     tr.insertCell().appendChild(shotBtn);
     const rate = document.createElement("input");
     rate.type = "text"; rate.placeholder = "e.g. 76"; rate.value = r.rate; rate.dataset.rateKey = r.key;
@@ -888,11 +1023,17 @@ function drawAppTable(typed = {}) {
     for (const [value, label] of [["", "Choose…"], ["ticked", "Ticked (refundable)"], ["not ticked", "Not ticked (non-refundable)"]]) {
       const o = document.createElement("option"); o.value = value; o.textContent = label; cancel.appendChild(o);
     }
+    cancel.dataset.key = r.key;
     cancel.value = r.cancellation || "";
     cancel.onchange = async () => {
-      try { await api("/api/app/cancellation", { csv: $("appCsvPath").value, chain, key: r.key, cancellation: cancel.value }); r.cancellation = cancel.value; }
-      catch (e) { fail(e); cancel.value = r.cancellation || ""; }
-      renderApp(true);
+      const before = r.cancellation || "", picked = cancel.value;
+      r.cancellation = picked;                                   // the pick is kept at once: a refresh while the save is in flight must not put the old value back
+      pendingCancel[r.key] = picked;
+      refreshAppReady();
+      try { await api("/api/app/cancellation", { csv: $("appCsvPath").value, chain, key: r.key, cancellation: picked }); }
+      catch (e) { if (pendingCancel[r.key] === picked) { r.cancellation = before; cancel.value = before; } fail(e); }
+      finally { if (pendingCancel[r.key] === picked) delete pendingCancel[r.key]; }
+      refreshAppReady();
     };
     tr.insertCell().appendChild(cancel);
     const mark = tr.insertCell(); mark.textContent = r.shot && r.rate && r.cancellation ? "✓" : ""; mark.className = "good";
@@ -956,11 +1097,9 @@ $("qrClose").onclick = () => { $("qrGate").hidden = true; qrToken++; };
 $("qrGate").addEventListener("click", e => { if (e.target === $("qrGate")) $("qrClose").click(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("qrGate").hidden) $("qrClose").click(); });
 
-$("appPickBtn").onclick = async () => {
-  $("appPickBtn").disabled = true;
+$("appPickBtn").onclick = () => withDialog("appCsvName", async () => {
   try { const r = await api("/api/pick", { kind: "results" }); if (!r.cancelled) await setAppCsv(r.path); } catch (e) { fail(e); }
-  $("appPickBtn").disabled = false;
-};
+});
 $("appFollowBtn").onclick = () => {
   if (!$("csvSelect").value) return alert("No file is chosen on the Upload tab");
   setAppCsv($("csvSelect").value).catch(fail);
@@ -972,14 +1111,15 @@ $("appRun").onclick = () => {
 $("appStop").onclick = () => api("/api/stop", {}).catch(fail);
 
 function showTab(name) {
-  $("panelUpload").hidden = name !== "upload"; $("panelApp").hidden = name !== "app"; $("panelQa").hidden = name !== "qa";
-  for (const [id, tab] of [["tabUpload", "upload"], ["tabApp", "app"], ["tabQa", "qa"]]) $(id).classList.toggle("active", name === tab);
+  $("panelUpload").hidden = name !== "upload"; $("panelApp").hidden = name !== "app"; $("panelQa").hidden = name !== "qa"; $("panelFix").hidden = name !== "fix";
+  for (const [id, tab] of [["tabUpload", "upload"], ["tabApp", "app"], ["tabQa", "qa"], ["tabFix", "fix"]]) $(id).classList.toggle("active", name === tab);
   if (name === "app") loadApp().catch(fail);
   if (name === "qa") (qaCsvValue() ? loadReview() : loadDashboardQa()).catch(() => {});
 }
 $("tabUpload").onclick = () => showTab("upload");
 $("tabApp").onclick = () => showTab("app");
 $("tabQa").onclick = () => showTab("qa");
+$("tabFix").onclick = () => showTab("fix");
 
 $("revCode").onclick = async () => {
   const item = revItems[revIdx];
@@ -992,31 +1132,249 @@ $("revCode").onclick = async () => {
     if (now) { el.textContent = codeLabel(now); el.classList.remove("copied"); }
   }, 1200);
 };
-let qaSkipFiles = [];
-const dashSlug = () => chain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+async function goToQa() {                           // carry the Upload file over, then show the QA tab
+  const uploadCsv = $("csvSelect").value;
+  if (uploadCsv && qaCsvValue() !== uploadCsv) await setQaCsv(uploadCsv);
+  showTab("qa");
+}
+$("goQaBtn").onclick = () => goToQa().catch(fail);
+$("qaFollowBtn").onclick = () => {
+  if (!$("csvSelect").value) return alert("No file is chosen on the Upload tab");
+  setQaCsv($("csvSelect").value).catch(fail);
+};
+let qaSkipFiles = [], qaOnlyFiles = [];
+const slugOf = c => c.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const qaChainNow = () => qaOnly ? qaChain : chain;           // QA-only has no chosen chain: it is the one the QA file was for
 async function loadDashboardQa(force) {
-  // opens on today's confirmed issues for the chosen chain; coming back to the tab keeps the marks made so far
-  if (!chain) return;
-  const same = qaCsvValue().includes(`done_dashboard_${dashSlug()}_${new Date().toLocaleDateString("sv")}`);
+  // opens on today's confirmed issues for the chain; coming back to the tab keeps the marks made so far
+  if (qaOnly && !qaChain && !qaSkipFiles.length && !qaOnlyFiles.length) {                 // nothing to detect from yet: say what to do, plainly
+    $("revEmpty").textContent = "QA only: choose a QA file with Skip issues from a QA cache… (a qa-cache or a COMPLETED file) and the chain is worked out from it.";
+    $("qaCsv").textContent = "none chosen"; return;
+  }
+  if (!qaOnly && !chain) return;
+  const same = qaChainNow() && qaCsvValue().includes(`done_dashboard_${slugOf(qaChainNow())}_${new Date().toLocaleDateString("sv")}${qaOnlyFiles.length ? "_recheck" : ""}`);
   if (same && !force) return;
   $("qaCsv").textContent = "Reading the dashboard…";
   try {
-    const r = await api("/api/qa/dashboard", { chain, skip: qaSkipFiles });
+    const r = await api("/api/qa/dashboard", { chain: qaOnly ? "" : chain, skip: qaSkipFiles, only: qaOnlyFiles });
+    if (qaOnly) { qaChain = r.chain; }
     await setQaCsv(r.path, false);
-    $("qaSkipMsg").hidden = !qaSkipFiles.length;
-    $("qaSkipMsg").textContent = `Skipped ${r.skipped} already QAed (from ${qaSkipFiles.map(f => f.split("/").pop()).join(", ")}), ${r.count} to go.`;
-  } catch (e) { $("qaCsv").textContent = "none chosen"; $("revEmpty").textContent = e.message; }
+    $("qaSkipMsg").hidden = !qaSkipFiles.length && !qaOnlyFiles.length;
+    if (qaOnlyFiles.length) {
+      $("qaSkipMsg").textContent = `Recheck: only the ${r.count} issue${r.count === 1 ? "" : "s"} from ${qaOnlyFiles.map(f => f.split("/").pop()).join(", ")}`
+        + (r.missing ? ` (${r.missing} in the file ${r.missing === 1 ? "is" : "are"} not on today's dashboard)` : "") + (qaSkipFiles.length ? `, with ${r.skipped} already QAed left out` : "") + ". Choose Load from the dashboard again to go back to the full list.";
+    } else
+    $("qaSkipMsg").textContent = `${r.detected ? `Chain: ${r.chain} (read from the file). ` : ""}Skipped ${r.skipped} already QAed (from ${qaSkipFiles.map(f => f.split("/").pop()).join(", ")}), ${r.count} to go.`;
+  } catch (e) { $("qaCsv").textContent = "none chosen"; $("revEmpty").textContent = e.message; if (qaOnly) qaSkipFiles = []; }
   updateQaReport();
 }
-$("qaDashBtn").onclick = () => loadDashboardQa(true).catch(fail);
-$("qaSkipBtn").onclick = async () => {
+$("qaDashBtn").onclick = () => { qaOnlyFiles = []; loadDashboardQa(true).catch(fail); };      // the plain button always goes back to the full list
+$("qaOnlyBtn").onclick = () => withDialog("qaCsv", async () => {
   try {
     const r = await api("/api/pick", { kind: "qacache" });
     if (r.cancelled) return;
+    qaOnlyFiles = [r.path];
+    await loadDashboardQa(true);
+  } catch (e) { qaOnlyFiles = []; fail(e); }
+});
+$("qaSkipBtn").onclick = () => withDialog("qaCsv", async () => {
+  try {
+    const r = await api("/api/pick", { kind: "qacache" });
+    if (r.cancelled) return;
+    qaOnlyFiles = [];
     if (!qaSkipFiles.includes(r.path)) qaSkipFiles.push(r.path);
     await loadDashboardQa(true);
   } catch (e) { fail(e); }
+});
+$("qaPickBtn").onclick = () => withDialog("qaCsv", async () => {
+  try {
+    const r = await api("/api/pick", { kind: "done" });
+    if (!r.cancelled) await setQaCsv(r.path);
+  } catch (e) { fail(e); }
+  updateQaReport();
+});
+
+
+/* ---- QA Fixes: the issues marked Problem, corrected on the issue itself ---- */
+let fixFiles = [], fixItems = [], fixCur = null, fixResults = "", fixOrig = {}, fixEdit = {}, fixShots = {}, fixLinks = {};
+const FIX_PLATFORMS = ["Desktop", "Mobile Web", "Mobile App"];
+const fixLabel = i => `${i.hotel_name || "Issue " + i.issue_id} · ${CHANNEL_NAMES[i.channel] || i.channel || ""}`;
+
+function fixExportState() {
+  const fixed = fixItems.filter(i => i.fixed).length;
+  $("fixExportBtn").disabled = !fixItems.length || (!fixed && !$("fixExportAll").checked);
+  $("fixExportBtn").textContent = $("fixExportAll").checked ? `Export all ${fixItems.length} Problems` : fixed ? `Export ${fixed} fixed Problem${fixed === 1 ? "" : "s"}` : "Export fixed Problems";
+}
+$("fixExportAll").onchange = fixExportState;
+async function exportProblems(automatic) {
+  $("fixExportMsg").className = "hint"; $("fixExportMsg").textContent = automatic ? "Every Problem is fixed: saving the file…" : "Saving…";
+  try {
+    const r = await api("/api/fixes/export", { files: fixFiles, include_unfixed: $("fixExportAll").checked });
+    $("fixExportMsg").className = "hint good";
+    $("fixExportMsg").textContent = `${automatic ? "Every Problem is fixed, so " : ""}${r.count} issue${r.count === 1 ? "" : "s"} saved as ${r.name}`
+      + (r.not_fixed ? ` (${r.not_fixed} Problem${r.not_fixed === 1 ? "" : "s"} not fixed yet are not in it)` : "") + ". On the QA tab, use Only these issues… to recheck them.";
+    const res = await fetch("/api/fixes/export-file?name=" + enc(r.name));                       // a copy to keep or send on
+    if (res.ok) { const url = URL.createObjectURL(await res.blob()); const a = document.createElement("a"); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+  } catch (e) { $("fixExportMsg").className = "hint problem"; $("fixExportMsg").textContent = e.message; }
+}
+$("fixExportBtn").onclick = () => exportProblems(false);
+async function fixLoad() {
+  if (!fixFiles.length) { fixItems = []; renderFixList(); $("fixMsg").textContent = ""; return; }
+  $("fixMsg").className = "hint"; $("fixMsg").textContent = "Reading…";
+  try {
+    const r = await api("/api/fixes/load", { files: fixFiles });
+    fixItems = r.items;
+    const open = fixItems.filter(i => !i.fixed).length;
+    $("fixMsg").textContent = fixItems.length ? `${fixItems.length} Problem issue${fixItems.length === 1 ? "" : "s"} (${open} not fixed yet).`
+      : `No issues marked Problem in ${r.files.join(", ")}.`;
+  } catch (e) { fixItems = []; $("fixMsg").className = "hint problem"; $("fixMsg").textContent = e.message; }
+  $("fixFiles").textContent = fixFiles.map(f => f.split("/").pop()).join(", ") || "none chosen";
+  renderFixList(); fixExportState();
+}
+function renderFixList() {
+  const t = $("fixList"); t.textContent = "";
+  if (!fixItems.length) return;
+  const head = t.createTHead().insertRow();
+  for (const h of ["Issue", "Brand code", "Date", "QA note", ""]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  const body = t.createTBody();
+  for (const i of fixItems) {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = fixLabel(i);
+    tr.insertCell().textContent = i.brand_code;
+    tr.insertCell().textContent = i.arrival_date;
+    tr.insertCell().textContent = i.note || i.check || "";
+    const b = document.createElement("button");
+    b.textContent = i.fixed ? "Fixed ✓ (open again)" : "Fix this";
+    b.onclick = () => fixOpen(i).catch(fail);
+    tr.insertCell().appendChild(b);
+  }
+}
+async function fixOpen(item) {
+  fixCur = item; fixEdit = {}; fixShots = {}; fixLinks = {}; fixRead = {};
+  $("fixEmpty").hidden = true; $("fixCard").hidden = false;
+  $("fixTitle").textContent = `${fixLabel(item)} · issue ${item.issue_id}`;
+  $("fixProblemNote").textContent = item.note ? `Marked Problem: ${item.note}` : (item.check ? `Marked Problem. Field check: ${item.check}` : "Marked Problem.");
+  $("fixStatus").textContent = "Reading the issue…"; $("fixResultMsg").textContent = ""; $("fixApply").disabled = true; $("fixNote").value = "";
+  $("fixShotBaseName").textContent = $("fixShotChannelName").textContent = "";
+  $("fixImgBase").removeAttribute("src"); $("fixImgChannel").removeAttribute("src");
+  glideTo("fixEditSection");
+  loadFixShots(item);                                       // the two screenshots load while the fields are being read, not after them
+  let r; try { r = await api("/api/fixes/read", { issue_id: item.issue_id }); }
+  catch (e) { $("fixStatus").textContent = e.message; fixOrig = {}; renderFixFields(); return; }
+  if (fixCur !== item) return;                              // moved on to another issue meanwhile
+  fixOrig = r.values; $("fixStatus").textContent = "";
+  renderFixFields(); loadFixLinks(item, r).catch(() => {});
+}
+async function loadFixShots(item) {
+  $("fixShotsMsg").className = "hint"; $("fixShotsMsg").textContent = "Loading the Lighthouse screenshots… the first one for an issue can take up to a minute.";
+  let res = null, error = "";
+  try { res = await api("/api/fixes/geo", { issue_id: item.issue_id }); } catch (e) { error = e.message; }
+  if (fixCur !== item) return;
+  if (!res) { $("fixShotsMsg").className = "hint problem"; $("fixShotsMsg").textContent = "Couldn't load the Lighthouse screenshots: " + error; return; }
+  // each image is placed by the label Geoinsight gives it (brand.com is the base, anything else is the channel), not by its position
+  const isBase = img => /brand/i.test(img.label || "");
+  const baseImg = res.images.find(isBase), chanImg = res.images.find(i => !isBase(i));
+  for (const [which, img, title] of [["Base", baseImg, "Base screenshot (brand.com)"], ["Channel", chanImg, "Channel screenshot"]]) {
+    if (!img) { $("fixCap" + which).textContent = `${title} · not found on the Geoinsight page`; continue; }
+    if (!fixShots[which.toLowerCase()]) $("fixImg" + which).src = img.url;          // a replacement the person has already chosen stays on show
+    $("fixCap" + which).textContent = `${title} · now on the issue (${img.w} × ${img.h}px)`;
+  }
+  $("fixShotsMsg").textContent = "";
+}
+function renderFixFields() {
+  const t = $("fixFields"); t.textContent = "";
+  const head = t.createTHead().insertRow();
+  for (const h of ["Field", "Now on the issue", "Change to"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  const body = t.createTBody();
+  const rows = [["Base shop rate", "base_shop_rate", "number"], ["Base cancellation", "base_cancellation", "tick"], ["Base platform", "base_platform", "platform"],
+                ["Channel shop rate", "channel_shop_rate", "number"], ["Channel cancellation", "channel_cancellation", "tick"], ["Channel platform", "channel_platform", "platform"]];
+  for (const [label, field, kind] of rows) {
+    const tr = body.insertRow(); tr.insertCell().textContent = label;
+    const now = fixOrig[field];
+    tr.insertCell().textContent = now === undefined || now === null ? "(not shown on the issue)" : kind === "tick" ? (now ? "ticked" : "not ticked") : String(now);
+    const cell = tr.insertCell(); let box;
+    if (kind === "number") { box = document.createElement("input"); box.type = "text"; box.placeholder = "leave as is"; box.value = fixEdit[field] ?? ""; }
+    else { box = document.createElement("select");
+      const opts = kind === "tick" ? [["", "leave as is"], ["1", "Ticked"], ["0", "Not ticked"]] : [["", "leave as is"], ...FIX_PLATFORMS.map(p => [p, p])];
+      for (const [v, l] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = l; box.appendChild(o); }
+      box.value = fixEdit[field] ?? ""; }
+    box.dataset.field = field;
+    box.onchange = box.oninput = () => { if (box.value === "") delete fixEdit[field]; else fixEdit[field] = box.value; refreshFixApply(); };
+    cell.appendChild(box);
+  }
+}
+function fixChanges() {
+  const out = {};
+  for (const [field, v] of Object.entries(fixEdit)) {
+    if (field.endsWith("cancellation")) out[field] = v === "1";
+    else if (field.endsWith("platform")) { if (v !== fixOrig[field]) out[field] = v; }
+    else if (v.trim() !== "" && String(v).trim() !== String(fixOrig[field] ?? "").trim()) out[field] = v.trim();
+  }
+  for (const [which, p] of Object.entries(fixShots)) out[which === "base" ? "base_screenshot" : "channel_screenshot"] = p.path;
+  return out;
+}
+function refreshFixApply() {
+  const n = Object.keys(fixChanges()).length;
+  $("fixApply").disabled = !n || !fixCur;
+  $("fixApply").textContent = n ? `Apply ${n} change${n === 1 ? "" : "s"}` : "Apply the changes";
+}
+let fixRead = {};                                                      // the last read of the open issue, kept so a later call still has its own links
+async function loadFixLinks(item, read) {
+  if (read) fixRead = read;
+  const own = fixRead || {};                                             // what the issue's own page gave: its base, channel and Geoinsight links
+  const r = await api("/api/fixes/links", { issue_id: item.issue_id, geoinsight: own.geoinsight || "", results: fixResults, brand_code: item.brand_code, channel: item.channel, arrival_date: item.arrival_date });
+  fixLinks = r.links;
+  $("fixOpenBrand").disabled = !fixLinks.brand; $("fixOpenChannel").disabled = !fixLinks.channel; $("fixOpenGeo").disabled = !fixLinks.geoinsight;
+  $("fixLinksMsg").textContent = r.notes.join(" ");
+  $("fixOpenBrand").title = fixLinks.brand ? "Open the brand.com page in your everyday Chrome" : "No brand page link found on the issue or in a results file";
+  $("fixOpenChannel").title = fixLinks.channel ? "Open the channel page in your everyday Chrome" : "No channel page link found on the issue or in a results file";
+}
+const fixOpenPage = which => () => fixLinks[which] ? api("/api/fixes/open", { url: fixLinks[which] }).catch(fail) : null;
+$("fixOpenBrand").onclick = fixOpenPage("brand"); $("fixOpenChannel").onclick = fixOpenPage("channel"); $("fixOpenGeo").onclick = fixOpenPage("geoinsight");
+
+for (const which of ["base", "channel"]) {
+  $(which === "base" ? "fixShotBase" : "fixShotChannel").onclick = () => withDialog(which === "base" ? "fixShotBaseName" : "fixShotChannelName", async () => {
+    if (!fixCur) return;
+    try {
+      const r = await api("/api/fixes/shot", { which, issue_id: fixCur.issue_id });
+      if (r.cancelled) return;
+      fixShots[which] = r;
+      $(which === "base" ? "fixShotBaseName" : "fixShotChannelName").textContent = `new: ${r.name}`;
+      const img = $(which === "base" ? "fixImgBase" : "fixImgChannel"); img.src = "/api/fixes/image?path=" + enc(r.path) + "&t=" + Date.now();
+      refreshFixApply();
+    } catch (e) { fail(e); }
+  });
+}
+$("fixApply").onclick = async () => {
+  const changes = fixChanges(), n = Object.keys(changes).length;
+  if (!n || !fixCur) return;
+  const names = Object.keys(changes).map(f => f.replace(/_/g, " ")).join(", ");
+  if (!confirm(`Change ${names} on issue ${fixCur.issue_id} in Parity Manager?\n\nThis saves to the real issue.`)) return;
+  $("fixApply").disabled = true; $("fixResultMsg").className = "hint"; $("fixResultMsg").textContent = "Applying in Parity Manager… this opens a tab in the tool's Chrome for a moment.";
+  try {
+    const r = await api("/api/fixes/apply", { issue_id: fixCur.issue_id, changes, note: $("fixNote").value });
+    $("fixResultMsg").className = "hint good";
+    $("fixResultMsg").textContent = `Done: ${r.changed.map(f => f.replace(/_/g, " ")).join(", ")} changed. The issue now reads base rate ${r.now.base_shop_rate}, channel rate ${r.now.channel_shop_rate}.`;
+    fixCur.fixed = true; fixOrig = { ...fixOrig, ...r.now }; fixEdit = {}; fixShots = {};
+    renderFixFields(); renderFixList(); refreshFixApply(); fixExportState();
+    if (fixItems.length && fixItems.every(i => i.fixed)) exportProblems(true);          // the last Problem was just fixed: the file is saved without being asked for
+    try { await api("/api/fixes/reopen", { issue_id: fixCur.issue_id, csv: qaCsvValue() }); $("fixResultMsg").textContent += " It is back in QA to be checked again."; }
+    catch (e) { $("fixResultMsg").textContent += " (It was not in the QA list loaded on the QA tab, so it was not sent back there: " + e.message + ")"; }
+  } catch (e) { $("fixResultMsg").className = "hint problem"; $("fixResultMsg").textContent = e.message; $("fixApply").disabled = false; }
 };
+$("fixPickBtn").onclick = () => withDialog("fixFiles", async () => {
+  try { const r = await api("/api/pick", { kind: "qacache" }); if (r.cancelled) return; if (!fixFiles.includes(r.path)) fixFiles.push(r.path); await fixLoad(); } catch (e) { fail(e); }
+});
+$("fixMineBtn").onclick = async () => {
+  // "no QA cache for today yet" is an ordinary answer, so it is said on the tab beside the button, not in a pop-up box that a refresh can interrupt
+  $("fixMsg").className = "hint"; $("fixMsg").textContent = "Looking for today's QA…";
+  try { const r = await api("/api/fixes/mine", { chain: qaChainNow() || chain }); fixFiles = [r.path]; await fixLoad(); }
+  catch (e) { $("fixMsg").className = "hint problem"; $("fixMsg").textContent = e.message; }
+};
+$("fixClearBtn").onclick = () => { fixFiles = []; fixCur = null; $("fixCard").hidden = true; $("fixEmpty").hidden = false; fixLoad(); };
+$("fixResultsBtn").onclick = () => withDialog("fixResults", async () => {
+  try { const r = await api("/api/pick", { kind: "results" }); if (r.cancelled) return; fixResults = r.path; $("fixResults").textContent = r.path.split("/").slice(-2).join(" / "); if (fixCur) loadFixLinks(fixCur).catch(() => {}); } catch (e) { fail(e); }
+});
 
 $("revPrev").onclick = () => { revIdx--; renderReview(true); glideTo("revCard"); };
 $("revNext").onclick = () => { revIdx++; renderReview(true); glideTo("revCard"); };
@@ -1134,6 +1492,7 @@ const RUN_CARD = p => `
     <div id="${p}Msg" class="hint"></div>
     <div class="actions">
       <button class="primary" id="${p}Save" disabled>Save issue</button>
+      <button id="${p}Skip" disabled title="Leave this issue for now. It is not recorded as declined, so it can come back in a later run">Skip</button>
       <button class="bad" id="${p}Decline" disabled title="This issue should not be raised. It is recorded as declined in the done file and does not come back">Decline</button>
       <input type="text" id="${p}Note" placeholder="Reason for declining (optional)" style="flex:1;min-width:200px">
       <button id="${p}Stop" disabled title="Stops the run after leaving this issue unsaved">Stop run</button>
@@ -1150,6 +1509,7 @@ for (const p of ["u", "a"]) {
   $(p + "Decline").onclick = () => {
     api("/api/send", { text: "d:" + $(p + "Note").value.replace(/\s+/g, " ").trim() }).then(() => { $(p + "Note").value = ""; }).catch(fail);
   };
+  $(p + "Skip").onclick = () => api("/api/send", { text: "s" }).catch(fail);
   $(p + "Stop").onclick = () => api("/api/send", { text: "q" }).catch(fail);
 }
 
@@ -1174,9 +1534,11 @@ function runRows(state) {                      // [label, what the form holds, w
 const runSeen = { u: "", a: "", ui: "", ai: "" };
 function renderRun(state, running) {
   for (const p of ["u", "a"]) {
-    const show = running && state;
+    const mine = !state || (p === "a") === (state.platform === "app");     // a run belongs to the tab it was started from
+    const show = running && state && mine;
     $(p + "Card").hidden = !show; $(p + "Idle").hidden = !!show;
-    $(p + "Idle").textContent = running ? "Starting…" : "Each issue appears here to check once its form is filled.";
+    $(p + "Idle").textContent = running ? (state && !mine ? (p === "a" ? "A Mobile Web run is in progress: see the Upload tab." : "A Mobile App run is in progress: see the Mobile App tab.") : "Starting…")
+                                        : "Each issue appears here to check once its form is filled.";
     if (!show) { runSeen[p] = runSeen[p + "i"] = ""; continue; }
     const app = state.platform === "app";
     $(p + "Title").textContent = `Issue ${state.n} of ${state.total} · ${state.hotel} · ${CHANNEL_NAMES[state.channel] || state.channel}${app ? " · Mobile App" : ""}`;
@@ -1217,7 +1579,7 @@ function renderRun(state, running) {
       $(p + "CapChannel").textContent = app ? "Phone screenshot (channel)" : "Channel screenshot";
     }
     const canAct = state.phase === "ready" || state.phase === "error";
-    $(p + "Save").disabled = !canAct; $(p + "Decline").disabled = !canAct; $(p + "Note").disabled = !canAct; $(p + "Stop").disabled = !running;
+    $(p + "Save").disabled = !canAct; $(p + "Decline").disabled = !canAct; $(p + "Skip").disabled = !canAct; $(p + "Note").disabled = !canAct; $(p + "Stop").disabled = !running;
   }
 }
 
@@ -1237,7 +1599,7 @@ function setFold(sec, key, folded, save = true) {
 }
 function initFolds() {
   const st = foldState();
-  document.querySelectorAll("#panelUpload > div > section, #panelUpload > section, #panelApp > section, #panelQa > section, #panelUpload section, #panelApp section, #panelQa section").forEach(sec => {
+  document.querySelectorAll("#panelUpload > div > section, #panelUpload > section, #panelApp > section, #panelQa > section, #panelFix > section, #panelUpload section, #panelApp section, #panelQa section, #panelFix section").forEach(sec => {
     const h = sec.querySelector(":scope > h2");
     if (!h || sec.classList.contains("fold")) return;
     const key = sec.closest("[id^=panel]").id + ":" + h.firstChild.textContent.trim();
@@ -1266,13 +1628,15 @@ function glideTo(id, block = "start") {
   const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block });
 }
-$("runBtn").onclick = () => {
+function startRun(extras_only) {
   const csv = $("csvSelect").value;
   if (!csv) return alert("No results CSV selected");
   since = 0; $("log").textContent = "";
-  api("/api/run", { csv, chain, dry_run: $("dryRun").checked, limit: $("limit").value })
+  api("/api/run", { csv, chain, dry_run: $("dryRun").checked, limit: $("limit").value, extras_only })
     .then(() => scrollToRun("uRunSection")).catch(fail);
-};
+}
+$("runBtn").onclick = () => startRun(false);
+$("extrasBtn").onclick = () => startRun(true);
 $("quitAppBtn").onclick = () => {
   if (!confirm("Stop the tool server?")) return;
   api("/api/quit", {}).then(() => {
@@ -1296,13 +1660,13 @@ async function poll() {
     $("chromeDot").classList.toggle("on", s.chrome);
     $("chromeText").textContent = s.chrome ? "running" : "not running";
     $("chromeSummary").textContent = s.chrome ? "· running" : "· not running";
-    $("runBtn").disabled = s.running;
+    $("runBtn").disabled = s.running; $("extrasBtn").disabled = s.running;
     for (const id of ["stopBtn", "appStop"]) $(id).disabled = !s.running;
     renderRun(s.state, s.running);
     $("runState").textContent = $("appRunState").textContent = s.running ? "Running…" : "";
     if (s.running) $("appRun").disabled = true;
     if ((wasRunning && !s.running) || (s.running && Date.now() - lastCountPoll > 2000)) {   // keep the saved count live during and just after a run
-      lastCountPoll = Date.now(); refreshLimits(wasRunning && !s.running).catch(() => {});
+      lastCountPoll = Date.now(); refreshGoQa().catch(() => {}); refreshLimits(wasRunning && !s.running).catch(() => {});
       if (wasRunning && !s.running && !$("panelApp").hidden) loadApp().catch(() => {});   // saved hotels drop off the list
       if (!s.running || !$("revCard").hidden || !revItems.length) loadReview().catch(() => {});
     }
@@ -1339,7 +1703,26 @@ async function checkLogin() {
     $("gateMsg").textContent = "Couldn't check the sign-in: " + e.message;
   } finally { checkingLogin = false; }
 }
-function closeGate() { $("loginGate").hidden = true; clearInterval(gateTimer); openChainGate().catch(fail); }   // the chain comes next
+function closeGate() { $("loginGate").hidden = true; clearInterval(gateTimer); chooseMode().catch(fail); }   // the choice of what you are doing comes next
+async function chooseMode() {
+  await settingsReady;
+  let saved = ""; try { saved = localStorage.getItem("mpMode") || ""; } catch (e) { /* not remembered */ }
+  if (saved === "qa") return enterQaOnly();
+  if (saved === "work") return enterWork();
+  $("modeGate").hidden = false;
+}
+function enterWork() { $("modeGate").hidden = true; setMode(false); openChainGate().catch(fail); }
+function enterQaOnly() { $("modeGate").hidden = true; setMode(true); }
+function setMode(qa) {
+  qaOnly = qa;
+  try { localStorage.setItem("mpMode", qa ? "qa" : "work"); } catch (e) { /* not remembered */ }
+  $("tabUpload").hidden = qa; $("tabApp").hidden = qa || chain !== appChain;
+  $("chainBtn").hidden = qa; $("dashBtn").hidden = qa; $("ignoreBtn").hidden = qa; $("modeBtn").textContent = qa ? "QA only · change" : "Work on issues · change";
+  if (qa) { $("capError").hidden = true; showTab("qa"); }
+  else if ($("panelQa").hidden === false && !chain) { /* stays on the QA tab until a chain is chosen */ }
+}
+$("modeWork").onclick = enterWork; $("modeQa").onclick = enterQaOnly;
+$("modeBtn").onclick = () => { try { localStorage.removeItem("mpMode"); } catch (e) { /* ignore */ } $("modeGate").hidden = false; };
 $("gateOpen").onclick = () => api("/api/chrome", {}).catch(fail);
 $("gateCheck").onclick = () => { $("gateMsg").textContent = "Checking…"; checkLogin(); };
 $("gateSkip").onclick = closeGate;

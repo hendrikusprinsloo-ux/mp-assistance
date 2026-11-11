@@ -119,6 +119,7 @@ class FormReader(HTMLParser):
         elif tag == "a" and self.geoinsight is None and "/geoinsight" in (a.get("href") or ""):
             self.geoinsight = a["href"]
 
+
     def handle_endtag(self, tag):
         if tag == "select":
             self._select = None

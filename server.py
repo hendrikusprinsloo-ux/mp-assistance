@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urljoin, urlparse, urlsplit
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
+import mp_rates  # noqa: E402
 import mp_review  # noqa: E402
 import mp_update  # noqa: E402
 import mp_upload  # noqa: E402  (its playwright import is lazy, so this is cheap)
@@ -96,9 +97,26 @@ PHOTO_TYPES = '{"public.jpeg", "public.png", "public.heic", "jpg", "jpeg", "png"
 PICKS = {   # kind -> (prompt, file types, folder the dialog opens in)
     "results": ("Choose the results CSV", CSV_TYPES, None),
     "done": ("Choose the done file of a run (or its results CSV)", CSV_TYPES, None),
-    "qacache": ("Choose a QA cache (qa-cache_….csv) of issues already QAed", CSV_TYPES, None),
+    "qacache": ("Choose a QA cache (qa-cache_….csv) or a COMPLETED QA file (COMPLETED_qa_….csv)", CSV_TYPES, None),
     "photo": ("Choose the phone screenshot (JPEG or PNG)", PHOTO_TYPES, Path.home() / "Downloads"),   # AirDrop lands in Downloads
 }
+
+
+DIALOG_LOCK = threading.Lock()          # the Finder dialog is slow to appear: a second click must not open a second one behind it
+DIALOG_OPEN_MSG = "A file window is already open. Look for it in Finder (or press Cmd + Tab), and finish or cancel it first."
+
+
+def run_dialog(script):
+    """Run one osascript dialog, refusing to start another while one is open. Returns (stdout, stderr, returncode) or None when busy/timed out."""
+    if not DIALOG_LOCK.acquire(blocking=False):
+        return "busy"
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
+        return res.stdout, res.stderr, res.returncode
+    except subprocess.TimeoutExpired:
+        return None
+    finally:
+        DIALOG_LOCK.release()
 
 
 def pick_folder(prompt):
@@ -107,13 +125,15 @@ def pick_folder(prompt):
     script = ('tell current application to activate\n'
               f'set f to choose folder with prompt "{prompt}" default location POSIX file "{start}"\n'
               'POSIX path of f')
-    try:
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
-    except subprocess.TimeoutExpired:
+    res = run_dialog(script)
+    if res == "busy":
+        return None, DIALOG_OPEN_MSG
+    if res is None:
         return None, None
-    path = res.stdout.strip().rstrip("/")
-    if res.returncode != 0 or not path:
-        return None, (None if "-128" in res.stderr else (res.stderr.strip() or "Folder dialog failed"))
+    out, err, code = res
+    path = out.strip().rstrip("/")
+    if code != 0 or not path:
+        return None, (None if "-128" in err else (err.strip() or "Folder dialog failed"))
     return path, None
 
 
@@ -172,13 +192,15 @@ def pick_file(kind):
         'tell current application to activate\n'
         f'set f to choose file with prompt "{prompt}" default location POSIX file "{start}" of type {types}\n'
         'POSIX path of f')
-    try:
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
-    except subprocess.TimeoutExpired:
+    res = run_dialog(script)
+    if res == "busy":
+        return None, DIALOG_OPEN_MSG
+    if res is None:
         return None, None
-    path = res.stdout.strip()
-    if res.returncode != 0 or not path:
-        return None, (None if "-128" in res.stderr else (res.stderr.strip() or "File dialog failed"))   # -128 = cancelled
+    out, err, code = res
+    path = out.strip()
+    if code != 0 or not path:
+        return None, (None if "-128" in err else (err.strip() or "File dialog failed"))   # -128 = cancelled
     return path, None
 
 
@@ -382,21 +404,428 @@ def save_limits(opts):
     return limits_for(chain), 200
 
 
+def read_qa_rows(path):
+    """The rows of a QA file, either a qa-cache_ file or a COMPLETED_qa_ report (both carry issue_id and qa_status).
+    Raises ValueError with a plain message when the file is neither."""
+    name = Path(path).name
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            have = set(reader.fieldnames or [])
+            rows = list(reader)
+    except (OSError, UnicodeDecodeError, csv.Error):
+        raise ValueError(f"Could not read {name}")
+    if not {"issue_id", "qa_status"} <= have:
+        raise ValueError(f"{name} is not a QA cache or a COMPLETED QA file (it has no issue_id and qa_status columns)")
+    return rows
+
+
+def chain_of_qa_files(paths):
+    """The one chain the given QA files are about, read from their `client` column: (chain, None), or (None, a plain reason).
+    Rows with no client are ignored; two different chains in the files is a refusal, not a guess."""
+    found = {}
+    for p in paths:
+        for row in read_qa_rows(p):
+            name = (row.get("client") or "").strip()
+            if name:
+                found.setdefault(name, 0)
+                found[name] += 1
+    known = {c: n for c, n in found.items() if c in CHAINS}
+    if len(known) == 1:
+        return next(iter(known)), None
+    if len(known) > 1:
+        return None, "These QA files are for more than one chain (" + ", ".join(sorted(known)) + "). Choose files for one chain at a time."
+    return None, "Could not tell which chain " + ("those files are" if len(paths) > 1 else "that file is") + " for: it has no client column."
+
+
 def qaed_issue_ids(paths):
-    """Issue ids marked OK in the given qa-cache files (an issue marked Problem is left in, to be looked at again)."""
+    """Issue ids marked OK in the given QA files (a qa-cache or a COMPLETED report). One marked Problem is left in, to be looked at again."""
     ids = set()
     for p in paths:
-        try:
-            with open(p, newline="", encoding="utf-8-sig") as f:
-                ids |= {r["issue_id"] for r in csv.DictReader(f) if r.get("issue_id") and r.get("qa_status") == "OK"}
-        except (OSError, KeyError):
-            raise ValueError(f"Could not read {Path(p).name} as a QA cache")
+        ids |= {r["issue_id"] for r in read_qa_rows(p) if r.get("issue_id") and r.get("qa_status") == "OK"}
     return ids
+
+
+# ---------- QA Fixes: the issues marked Problem in QA, corrected on the issue itself
+FIX_SHOTS = HERE / "qa_fixes"                       # screenshots chosen for a fix are copied here (never the person's originals)
+FIX_LOG_FIELDS = ["timestamp", "issue_id", "fixed_by", "changed", "before", "after", "note"]
+
+
+def fix_log_path(day=None):
+    return HERE / "qa_from_dashboard" / f"qa-fixes_{day or time.strftime('%Y-%m-%d')}.csv"
+
+
+def problem_rows(paths):
+    """({issue_id: row}, rows read): the issues whose latest mark across the QA files is Problem. Raises ValueError for an unreadable file."""
+    problems, seen = {}, 0
+    for p in paths:
+        for row in read_qa_rows(p):
+            seen += 1
+            iid = row.get("issue_id", "")
+            if not iid:
+                continue
+            if row.get("qa_status") == "Problem":
+                problems[iid] = row                       # a later file or row for the same issue wins
+            elif iid in problems and row.get("qa_status") == "OK":
+                del problems[iid]                         # it was marked OK afterwards
+    return problems, seen
+
+
+def fixes_load(opts):
+    """The Problem rows of the QA files given (a qa-cache or a COMPLETED report), newest mark per issue, minus any already fixed today."""
+    paths = [str(p) for p in opts.get("files") or []]
+    if not paths:
+        return {"error": "Choose a QA cache or a COMPLETED QA file first"}, 400
+    try:
+        problems, seen = problem_rows(paths)
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    fixed = fixes_done_today()
+    items = [{"issue_id": i, "hotel_name": r.get("hotel_name", ""), "brand_code": r.get("brand_code", ""), "channel": r.get("channel", ""),
+              "arrival_date": r.get("arrival_date", ""), "note": r.get("qa_note", ""), "check": r.get("qa_field_check", ""),
+              "client": r.get("client", ""), "issue_url": r.get("issue_url", ""), "fixed": i in fixed}
+             for i, r in problems.items()]
+    return {"items": items, "rows_read": seen, "files": [Path(p).name for p in paths]}, 200
+
+
+PROBLEMS_NAME = re.compile(r"qa-problems_[a-z0-9-]+_\d{4}-\d{2}-\d{2}\.csv")
+
+
+def fix_times_today():
+    """{issue_id: when its latest fix today was applied}."""
+    path = fix_log_path()
+    if not path.is_file():
+        return {}
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        return {r["issue_id"]: r.get("timestamp", "") for r in csv.DictReader(f) if r.get("issue_id")}
+
+
+def fixes_export(opts):
+    """Write the fixed Problem issues of the loaded QA files as their own cache, qa-problems_<chain>_<date>.csv, to be rechecked on the QA tab
+    with 'Only these issues'. It holds the Problem rows in the cache's own columns (plus when each was fixed), so the QA tab and the skip
+    feature can both read it. With include_unfixed it holds every Problem issue, not only the fixed ones."""
+    paths = [str(p) for p in opts.get("files") or []]
+    if not paths:
+        return {"error": "Choose a QA cache or a COMPLETED QA file first"}, 400
+    try:
+        problems, _ = problem_rows(paths)
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    times = fix_times_today()
+    wanted = {i: r for i, r in problems.items() if opts.get("include_unfixed") or i in times}
+    if not wanted:
+        return {"error": ("There are no Problem issues in those files." if not problems else
+                          f"None of the {len(problems)} Problem issue{'s' if len(problems) != 1 else ''} has been fixed yet, so there is nothing to export. Fix one first.")}, 409
+    chain, _ = chain_of_qa_files(paths)
+    slug = re.sub(r"[^a-z0-9]+", "-", (chain or "mixed").lower()).strip("-")
+    path = HERE / "qa_from_dashboard" / f"qa-problems_{slug}_{time.strftime('%Y-%m-%d')}.csv"
+    path.parent.mkdir(exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, PROBLEMS_FIELDS)
+        w.writeheader()
+        for iid, row in wanted.items():
+            w.writerow({"key": f"dashboard|{iid}", "qa_by": row.get("qa_by", ""), "qa_at": row.get("qa_at", ""), "client": row.get("client", ""),
+                        "brand_code": row.get("brand_code", ""), "hotel_name": row.get("hotel_name", ""), "channel": row.get("channel", ""),
+                        "arrival_date": row.get("arrival_date", ""), "subscription_id": row.get("subscription_id", ""), "issue_id": iid,
+                        "issue_url": row.get("issue_url", ""), "qa_status": "Problem", "qa_note": row.get("qa_note", ""),
+                        "qa_field_check": row.get("qa_field_check", ""), "fixed_at": times.get(iid, "")})
+    return {"path": str(path), "name": path.name, "count": len(wanted), "problems": len(problems),
+            "not_fixed": len(problems) - sum(1 for i in problems if i in times)}, 200
+
+
+def problems_file(name):
+    """The bytes of an exported qa-problems file, for a download. Only files of that exact name pattern in qa_from_dashboard are served."""
+    if not PROBLEMS_NAME.fullmatch(name or ""):
+        return None
+    path = HERE / "qa_from_dashboard" / name
+    return path.read_bytes() if path.is_file() else None
+
+
+def fixes_done_today():
+    path = fix_log_path()
+    if not path.is_file():
+        return set()
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        return {r["issue_id"] for r in csv.DictReader(f) if r.get("issue_id")}
+
+
+def fix_shot(opts):
+    """Choose a replacement screenshot for one issue: a copy is kept under qa_fixes/ and its path is returned for the next apply."""
+    which = opts.get("which")
+    iid = str(opts.get("issue_id", ""))
+    if which not in ("base", "channel") or not iid.isdigit():
+        return {"error": "Bad request"}, 400
+    path, problem = pick_file("photo")
+    if problem:
+        return {"error": problem}, 500
+    if path is None:
+        return {"cancelled": True}, 200
+    source = Path(path)
+    if source.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+        return {"error": "Choose a PNG or JPEG image. iPhone photos in HEIC need to be JPEG first."}, 400
+    FIX_SHOTS.mkdir(exist_ok=True)
+    dest = FIX_SHOTS / f"{iid}_{which}{source.suffix.lower()}"
+    shutil.copyfile(source, dest)
+    return {"ok": True, "path": str(dest), "name": source.name}, 200
+
+
+REDIRECT = "https://app.mylighthouse.com/redirect/"
+
+
+def links_from_geoinsight(geo_url):
+    """The brand.com and channel page links, built from the issue's own Geoinsight link.
+
+    Geoinsight's `hii` is the hotel-info id, which is the `hotelId` the scraper's redirect links carry (confirmed by opening one), and its
+    `otas` list names the two sites the same way the redirect's `ota=` does. The rest of a redirect link never varies in the scraper's
+    own links (los=1, persons=2, city=false), so the whole link can be rebuilt. Returns {"brand", "channel"}; anything it cannot work
+    out is left out, so the caller falls back to a results file."""
+    q = parse_qs(urlsplit(str(geo_url or "")).query)
+    one = lambda k: (q.get(k) or [""])[0]
+    hotel, sub, day = one("hii"), one("subscriptionId"), one("fromDate")
+    try:
+        sites = [str(x).lower() for x in json.loads(one("otas") or "[]")]
+    except ValueError:
+        sites = []
+    if not (hotel.isdigit() and sub.isdigit() and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) and sites):
+        return {}
+
+    def link(ota):
+        return f"{REDIRECT}?ota={ota}&hotelId={hotel}&fromDate={day}&los=1&persons=2&city=false&subscription_id={sub}"
+    out = {}
+    if "branddotcom" in sites:
+        out["brand"] = link("branddotcom")
+    channel = next((x for x in sites if x != "branddotcom" and re.fullmatch(r"[a-z0-9]+", x)), "")
+    if channel:
+        out["channel"] = link(channel)
+    return out
+
+
+def fix_links(opts):
+    """The pages an issue's screenshots come from, for retaking one in the person's own Chrome.
+
+    brand and channel come from the results file the issue was raised from (matched by brand code, channel and date, or by a
+    results CSV the person points at); geoinsight comes from the saved issue's own page. Anything not found is left out and said so."""
+    iid = str(opts.get("issue_id", ""))
+    if not iid.isdigit():
+        return {"error": "Bad issue id"}, 400
+    links, notes = {}, []
+    geo = str(opts.get("geoinsight", "") or "")
+    if geo.startswith("https://") and (urlsplit(geo).hostname or "").endswith("mylighthouse.com"):
+        links["geoinsight"] = geo
+        links.update(links_from_geoinsight(geo))                  # brand and channel are rebuilt from the issue's own Geoinsight link
+    csv_path = results_csv(str(opts.get("results", ""))) if not ({"brand", "channel"} <= set(links)) else None      # a results file only fills what is missing
+    if csv_path is not None:
+        want = (str(opts.get("brand_code", "")).strip().lower(), str(opts.get("channel", "")).strip().lower(),
+                mp_upload.normalize_date(str(opts.get("arrival_date", ""))))
+        for _, row in mp_upload.load_rows(csv_path):
+            have = (row.get("brand_code", "").strip().lower(), row.get("OTA_name", "").strip().lower(),
+                    mp_upload.normalize_date(row.get("from_date", "")))
+            if have == want:
+                if "brand" not in links and row.get("branddotcom_url", "").startswith("http"):
+                    links["brand"] = row["branddotcom_url"]
+                if "channel" not in links and row.get("url", "").startswith("http"):
+                    links["channel"] = row["url"]
+                if "geoinsight" not in links and row.get("screenshots_url", "").startswith("http"):
+                    links["geoinsight"] = row["screenshots_url"]
+                break
+        else:
+            notes.append("That results file has no row for this issue.")
+    elif not ({"brand", "channel"} <= set(links)):
+        notes.append("Could not work out the brand and channel pages from this issue. Choose the day's results file to get them.")
+    if "geoinsight" not in links and chrome_up():
+        body, status = run_fix(iid, "--read", timeout=60)
+        if status == 200:
+            if body.get("geoinsight"):
+                links["geoinsight"] = body["geoinsight"]
+                for key, value in links_from_geoinsight(body["geoinsight"]).items():
+                    links.setdefault(key, value)
+    return {"links": links, "notes": notes}, 200
+
+
+def open_in_main_chrome(opts):
+    """Open one of an issue's source pages in the person's everyday Chrome, not the tool's own (which has a separate profile folder).
+
+    Every link comes from the results file or the issue page, and all of them are app.mylighthouse.com addresses (the brand and channel
+    ones redirect to the real site), so only those are opened. `-n --args` starts Chrome on its default profile folder: if the everyday
+    Chrome is already running it takes the page, and the tool's Chrome (a different folder) is never chosen by mistake."""
+    url = str(opts.get("url", ""))
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not (parts.hostname or "").endswith("mylighthouse.com"):
+        return {"error": "That is not a page this app opens"}, 400
+    try:
+        subprocess.run(["open", "-n", "-a", "Google Chrome", "--args", url], timeout=10, capture_output=True)
+    except (OSError, subprocess.TimeoutExpired):
+        return {"error": "Could not open Google Chrome"}, 500
+    return {"ok": True}, 200
+
+
+def fixes_mine(opts):
+    """Today's QA cache for the chain: the file the QA tab has been writing as the person marks issues."""
+    chain = opts.get("chain")
+    if chain not in CHAINS:
+        return {"error": "Choose a chain first"}, 400
+    slug = re.sub(r"[^a-z0-9]+", "-", chain.lower()).strip("-")
+    path = HERE / "qa_from_dashboard" / f"qa-cache_dashboard_{slug}_{time.strftime('%Y-%m-%d')}.csv"
+    if not path.is_file():
+        return {"error": f"There is no QA cache for {chain} today yet. Mark some issues on the QA tab first, or choose a file."}, 404
+    return {"path": str(path)}, 200
+
+
+def fix_image(path_text):
+    """A screenshot chosen for a fix, to show it on the page. Only files this app copied under qa_fixes/ are served."""
+    path = Path(path_text)
+    if path.parent != FIX_SHOTS or not path.is_file() or path.suffix.lower() not in (".png", ".jpg", ".jpeg"):
+        return None
+    return path.read_bytes(), ("image/png" if path.suffix.lower() == ".png" else "image/jpeg")
+
+
+fix_geo_cache = {}                                   # issue id -> [{file, label, w, h}], oldest first (a few issues at a time, like the QA tab)
+
+
+def fix_geo(opts):
+    """The issue's own Lighthouse screenshots, so they can be compared with the values and replaced if wrong."""
+    iid = str(opts.get("issue_id", ""))
+    if not iid.isdigit():
+        return {"error": "Bad issue id"}, 400
+    if iid in fix_geo_cache:
+        fix_geo_cache[iid] = fix_geo_cache.pop(iid)
+    else:
+        result, status = run_fix(iid, "--images", str(GEO_DIR), "--stem", "fix" + iid, timeout=150)
+        if status != 200:
+            return result, status
+        fix_geo_cache[iid] = result["images"]
+        while len(fix_geo_cache) > GEO_KEEP:
+            for old in fix_geo_cache.pop(next(iter(fix_geo_cache))):
+                (GEO_DIR / old["file"]).unlink(missing_ok=True)
+    return {"images": [{"label": i["label"], "w": i["w"], "h": i["h"], "url": f"/api/fixes/geo-image?id={iid}&i={n}"}
+                       for n, i in enumerate(fix_geo_cache[iid])]}, 200
+
+
+def fix_read(opts):
+    iid = str(opts.get("issue_id", ""))
+    if not iid.isdigit():
+        return {"error": "Bad issue id"}, 400
+    return run_fix(iid, "--read")
+
+
+def run_fix(issue_id, *flags, timeout=120):
+    cmd = [sys.executable, str(HERE / "mp_fix.py"), issue_id, "--chrome", CHROME_URL, *flags]
+    try:
+        res = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"error": "The issue took too long to answer"}, 504
+    lines = res.stdout.strip().splitlines()
+    result = [l for l in lines if l.startswith("RESULT ")]
+    if result:
+        return json.loads(result[-1][len("RESULT "):]), 200
+    tail = lines + res.stderr.strip().splitlines()
+    error = next((l[len("ERROR "):] for l in reversed(tail) if l.startswith("ERROR ")), None)
+    return {"error": error or (tail[-1] if tail else "The fix failed")}, 500
+
+
+def fix_apply(opts):
+    """Apply the changed fields to the saved issue in Parity Manager, then log it. Only the fields sent are touched."""
+    iid = str(opts.get("issue_id", ""))
+    changes = opts.get("changes")
+    if not iid.isdigit() or not isinstance(changes, dict) or not changes:
+        return {"error": "There is nothing to change"}, 400
+    for field in ("base_screenshot", "channel_screenshot"):       # only files this app copied under qa_fixes/ are accepted
+        if field in changes:
+            p = Path(str(changes[field]))
+            if p.parent != FIX_SHOTS or not p.is_file():
+                return {"error": "Choose the screenshot again with its button"}, 400
+    if not chrome_up():
+        return {"error": "The tool's Chrome is not running"}, 409
+    before, _ = run_fix(iid, "--read")
+    changes_file = Path(tempfile.mkdtemp(prefix="mp_fix_")) / "changes.json"
+    changes_file.write_text(json.dumps(changes))
+    try:
+        body, status = run_fix(iid, "--apply", str(changes_file), timeout=180)
+    finally:
+        shutil.rmtree(changes_file.parent, ignore_errors=True)
+    if status != 200:
+        return body, status
+    log = fix_log_path()
+    log.parent.mkdir(exist_ok=True)
+    new = not log.is_file() or log.stat().st_size == 0
+    with open(log, "a", newline="", encoding="utf-8-sig" if new else "utf-8") as f:
+        w = csv.DictWriter(f, FIX_LOG_FIELDS)
+        if new:
+            w.writeheader()
+        w.writerow({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"), "issue_id": iid, "fixed_by": getpass.getuser(),
+                    "changed": ", ".join(body.get("changed", [])), "before": json.dumps((before or {}).get("values", {})),
+                    "after": json.dumps(body.get("now", {})), "note": str(opts.get("note", ""))[:300]})
+    return body, 200
+
+
+def drop_from_qa_cache(done, key):
+    """Take one issue out of the person's QA cache. Returns True if a row was removed.
+
+    The cache is what "Skip issues from a QA cache" reads, so an issue whose fix has reopened it must not stay in it as OK:
+    someone skipping with that file would pass over an issue that has not been checked again."""
+    path = qa_cache_path(done)
+    if not path.is_file():
+        return False
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        rows = [r for r in csv.DictReader(f) if r.get("key")]
+    kept = [r for r in rows if r["key"] != key]
+    if len(kept) == len(rows):
+        return False
+    out = io.StringIO()
+    w = csv.DictWriter(out, CACHE_FIELDS)
+    w.writeheader()
+    for row in kept:
+        w.writerow({k: row.get(k, "") for k in CACHE_FIELDS})
+    path.write_text(out.getvalue(), encoding="utf-8-sig")
+    return True
+
+
+def fix_reopen(opts):
+    """Send a fixed issue back into QA: its mark is removed from the review file (so it shows as unchecked) and its row from the QA cache
+    (so a skip using that cache no longer passes it over). Marking it again afterwards writes both back."""
+    iid = str(opts.get("issue_id", ""))
+    done = resolve_done(str(opts.get("csv", "")))
+    if done is None or not iid.isdigit():
+        return {"error": "Open the QA tab on today's issues first"}, 400
+    entries = mp_upload.load_done_entries(done)
+    key = next((k for k, e in entries.items() if e.get("issue_id") == iid), None)
+    if key is None:
+        return {"error": f"Issue {iid} is not in the issues loaded on the QA tab"}, 404
+    path = review_log_path(done)
+    marks = review_marks(done)
+    if key in marks:                                 # drop its mark so it shows as unchecked again; the log keeps a note of the reopening
+        rows = [r for r in csv.DictReader(open(path, newline="")) if r.get("key") != key]
+        with open(path, "w", newline="") as f:
+            w = csv.DictWriter(f, REVIEW_FIELDS)
+            w.writeheader()
+            for row in rows:
+                w.writerow({k: row.get(k, "") for k in REVIEW_FIELDS})
+    removed = drop_from_qa_cache(done, key)
+    write_qa_results(done)
+    return {"ok": True, "key": key, "cache_row_removed": removed}, 200
 
 
 def qa_dashboard(opts):
     """Pull a day's confirmed issues for a chain from the dashboard into a done-style file, so QA can review them."""
     chain = opts.get("chain")
+    detected = False
+    only_files = [str(p) for p in opts.get("only") or []]
+    only_ids = None
+    if only_files:                                          # a recheck: just the issues in these QA files (an export of fixed Problems)
+        try:
+            only_ids = {r["issue_id"] for p in only_files for r in read_qa_rows(p) if r.get("issue_id")}
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        if not only_ids:
+            return {"error": "Those files hold no issues."}, 400
+    if chain not in CHAINS and (opts.get("skip") or only_files):    # QA-only: the chain comes from the QA file(s) given, not from a choice
+        try:
+            chain, why = chain_of_qa_files(only_files + [str(p) for p in opts.get("skip") or []])
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        if chain is None:
+            return {"error": why}, 400
+        detected = True
     if chain not in CHAINS:
         return {"error": "Choose a chain first"}, 400
     try:
@@ -407,6 +836,12 @@ def qa_dashboard(opts):
     if got["error"]:
         return {"error": got["error"]}, 502
     issues = [i for i in got["issues"] if i.get("issue_id")]   # the subscription id link is what carries the issue id
+    missing = 0
+    if only_ids is not None:
+        missing = len(only_ids - {i["issue_id"] for i in issues})      # in the file but not on today's dashboard (deleted, or another day)
+        issues = [i for i in issues if i["issue_id"] in only_ids]
+        if not issues:
+            return {"error": f"None of the {len(only_ids)} issue{'s' if len(only_ids) != 1 else ''} in that file is on the dashboard for {chain} on {day.isoformat()}."}, 404
     try:
         qaed = qaed_issue_ids([str(p) for p in opts.get("skip") or []])
     except ValueError as e:
@@ -419,7 +854,8 @@ def qa_dashboard(opts):
         return {"error": f"The dashboard shows no confirmed issues for {chain} on {day.isoformat()}."}, 404
     folder = HERE / "qa_from_dashboard"
     folder.mkdir(exist_ok=True)
-    path = folder / f"done_dashboard_{re.sub(r'[^a-z0-9]+', '-', chain.lower()).strip('-')}_{day.isoformat()}.csv"
+    suffix = "_recheck" if only_ids is not None else ""     # a recheck has its own files: it must not overwrite the day's full list or its COMPLETED report
+    path = folder / f"done_dashboard_{re.sub(r'[^a-z0-9]+', '-', chain.lower()).strip('-')}_{day.isoformat()}{suffix}.csv"
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, mp_upload.LOG_FIELDS)
         w.writeheader()
@@ -428,7 +864,8 @@ def qa_dashboard(opts):
                         "OTA_name": issue["channel"], "brand_code": issue["subscription_id"],
                         "from_date": issue.get("extract_date") or day.isoformat(), "subscription_id": issue["subscription_id"],
                         "outcome": "saved", "client": chain, "issue_id": issue["issue_id"], "platform": "?"})
-    return {"path": str(path), "count": len(issues), "day": day.isoformat(), "confirmed": got["count"], "skipped": skipped}, 200
+    return {"path": str(path), "count": len(issues), "day": day.isoformat(), "confirmed": got["count"], "skipped": skipped,
+            "chain": chain, "detected": detected, "only": len(only_ids) if only_ids is not None else 0, "missing": missing}, 200
 
 
 def resolve_done(arg):
@@ -506,6 +943,7 @@ QA_FIELDS = ["client", "brand_code", "hotel_name", "channel", "arrival_date", "s
              "qa_status", "qa_note", "qa_field_check", "qa_at"]
 CACHE_FIELDS = ["key", "qa_by", "qa_at", "client", "brand_code", "hotel_name", "channel", "arrival_date", "subscription_id", "issue_id",
                 "issue_url", "qa_status", "qa_note", "qa_field_check"]
+PROBLEMS_FIELDS = CACHE_FIELDS + ["fixed_at"]          # an exported Problems file: the cache's own columns plus when each issue was fixed
 
 
 def qa_text(done):
@@ -718,7 +1156,11 @@ def start_run(opts):
         cmd.append("--dry-run")
     limit = str(opts.get("limit") or "").strip()
     limit = int(limit) if limit.isdigit() and int(limit) > 0 else None
-    if not dry_run and not IGNORE_CAP["on"]:   # a preview is not held to the limit, a real run is (unless the limits are ignored)
+    extras = bool(opts.get("extras_only"))
+    if extras:       # only the rows past each channel's limit: no limit refusal and no channel room (the Save button still checks the dashboard)
+        caps = {ch: c["cap"] for ch, c in limits_for(chain)["channels"].items() if c["cap"]}
+        cmd += ["--extras-after", json.dumps(caps)]
+    elif not dry_run and not IGNORE_CAP["on"]:   # a preview is not held to the limit, a real run is (unless the limits are ignored)
         lim = limits_for(chain, fresh=True)       # asks the dashboard now, so other people's issues count too
         if lim["over"]:
             return {"error": f"{chain} already has {lim['used_total']} confirmed issues today, over the limit of {lim['total_cap']}. "
@@ -728,7 +1170,10 @@ def start_run(opts):
                              f"{' (the rest is kept for Mobile App issues)' if lim['caps']['app'] and lim['used_total'] < lim['total_cap'] else ''}. "
                              "Raise the limit under the chain button if more are needed."}, 409
         # every remaining row is loaded, not just as many as the limit leaves room for: an issue can be declined, which frees its place.
-        # Save issue still refuses anything that would go over the daily or channel limits.
+        # What each channel may still take is passed along, so rows past it are skipped quietly (not declined) once the channel is full.
+        room = {ch: max(c["remaining"], 0) for ch, c in lim["channels"].items() if c["remaining"] is not None}
+        if room:
+            cmd += ["--channel-room", json.dumps(room)]
     if limit:
         cmd += ["--limit", str(limit)]
     cmd += ["--existing", str(existing_pairs_file(chain, csv_path.stem))]
@@ -777,7 +1222,6 @@ def update_install():
     except Exception as e:
         return {"error": f"The update was not installed: {str(e).splitlines()[0][:160]}"}, 502
     return {"ok": True, "version": info["latest"], "files": len(changed)}, 200
-
 
 
 def version():
@@ -845,6 +1289,21 @@ def app_eligible(csv_path, chain):
                      "cancellation": saved.get("cancellation", "")})
     done_info = {"name": done.name, "count": len(mp_upload.load_done_entries(done))} if done.is_file() else None
     return {"allowed": True, "rows": rows, "skipped": skipped, "done_file": done_info, **limits_for(chain)}
+
+
+def rates_check(csv_path):
+    """Rows whose label in the results file differs from the one worked out again from the raw rate texts, with the ones that
+    would become confirmed issues listed first. A warning only: runs still use the file's own label."""
+    if csv_path is None:
+        return {"rows": 0, "changed": [], "would_confirm": []}
+    try:
+        res = mp_rates.audit(csv_path)
+    except (OSError, csv.Error, KeyError) as e:
+        return {"error": f"Could not check the rates: {e}", "rows": 0, "changed": [], "would_confirm": []}
+    pick = lambda c: {"hotel": c[0], "channel": c[1], "file_label": c[2], "new_label": c[3], "file_diff": c[4], "new_diff": c[5]}
+    would = [pick(c) for c in res["changed"] if c[3] == "lower_than_brand" and c[2] != "lower_than_brand"]
+    return {"rows": res["rows"], "same": res["same"], "changed": len(res["changed"]), "would_confirm": would,
+            "no_longer": [pick(c) for c in res["changed"] if c[2] == "lower_than_brand" and c[3] != "lower_than_brand"]}
 
 
 def app_row(opts):
@@ -1305,9 +1764,74 @@ def close_tool_chrome():
         pass
 
 
+APP_PORTS = (8765, 8766)        # the real app and the testing copy: they run side by side but share ONE tool Chrome (one profile, port 9222)
+CHROME_EXIT_WAIT = 6.0          # seconds a leftover tool Chrome gets to close politely before it is forced
+
+
+def other_app_running():
+    """Whether another copy of this app (the real one or the testing one) is answering: if so it is using the tool's Chrome too."""
+    for port in APP_PORTS:
+        if port == PORT:
+            continue
+        try:
+            urllib.request.urlopen(f"http://{HOST}:{port}/api/settings", timeout=1).close()
+            return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def tool_chrome_running():
+    try:
+        return subprocess.run(["pgrep", "-f", "--", f"--user-data-dir={CHROME_PROFILE}"], capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def reset_tool_chrome():
+    """At start-up: close a tool Chrome left over from an earlier run. A leftover one can take the request for the new window without
+    showing it, which looks like the app not opening. Not touched while another copy of the app is running, since that copy is using it.
+    Returns what happened: "none", "in use" or "closed"."""
+    if not tool_chrome_running():
+        return "none"
+    if other_app_running():
+        return "in use"
+    close_tool_chrome()
+    deadline = time.time() + CHROME_EXIT_WAIT
+    while tool_chrome_running() and time.time() < deadline:
+        time.sleep(0.25)
+    if tool_chrome_running():                            # it ignored the polite request: force it (only the tool's own profile)
+        try:
+            subprocess.run(["pkill", "-KILL", "-f", f"--user-data-dir={CHROME_PROFILE}"], timeout=5,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        time.sleep(1.0)
+    return "closed"
+
+
+def close_own_window():
+    """Close only this copy's tool window (the page at UI_URL), leaving the shared Chrome and the other copy's windows alone."""
+    for target in chrome_targets() or []:
+        if target.get("type") == "page" and target.get("url", "").startswith(UI_URL):
+            try:
+                urllib.request.urlopen(f"{CHROME_URL}/json/close/{target['id']}", timeout=3).close()
+            except OSError:
+                pass
+
+
+def shutdown_tool_chrome():
+    """When the app stops: close the tool's Chrome, unless the other copy is using it, then close just this copy's window. Returns a line for the log."""
+    if other_app_running():
+        close_own_window()
+        return "left the tool's Chrome running: the other copy of the app is using it"
+    close_tool_chrome()
+    return "closed the tool's Chrome"
+
+
 def quit_app():
     stop_run()
-    close_tool_chrome()
+    shutdown_tool_chrome()
     shutil.rmtree(GEO_DIR, ignore_errors=True)
     threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
     return {"ok": True}, 200
@@ -1357,6 +1881,9 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/limits":
             chain = parse_qs(url.query).get("chain", [""])[0]
             return self.reply(limits_for(chain if chain in CHAINS else current_chain(), fresh="fresh" in parse_qs(url.query)))
+        if url.path == "/api/rates/check":
+            csv_path = results_csv(parse_qs(url.query).get("csv", [""])[0])
+            return self.reply(rates_check(csv_path))
         if url.path == "/api/app/eligible":
             q = parse_qs(url.query)
             csv_path = results_csv(q.get("csv", [""])[0])
@@ -1372,6 +1899,24 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/runs/latest":
             body, status = latest_results_reply()
             return self.reply(body, status)
+        if url.path == "/api/fixes/export-file":
+            name = parse_qs(url.query).get("name", [""])[0]
+            body = problems_file(name)
+            if body is None:
+                return self.reply({"error": "not found"}, 404)
+            return self.reply(body, ctype="text/csv; charset=utf-8", headers={"X-Report-Name": name})
+        if url.path == "/api/fixes/geo-image":
+            q = parse_qs(url.query)
+            try:
+                entry = fix_geo_cache[q.get("id", [""])[0]][int(q.get("i", ["0"])[0])]
+                return self.reply((GEO_DIR / entry["file"]).read_bytes(), ctype="image/png")
+            except (KeyError, IndexError, ValueError, OSError):
+                return self.reply({"error": "not found"}, 404)
+        if url.path == "/api/fixes/image":
+            found = fix_image(parse_qs(url.query).get("path", [""])[0])
+            if found is None:
+                return self.reply({"error": "not found"}, 404)
+            return self.reply(found[0], ctype=found[1])
         if url.path == "/api/csv/exists":      # lets the page restore the file it had chosen before a reload
             return self.reply({"exists": results_csv(parse_qs(url.query).get("csv", [""])[0]) is not None})
         if url.path == "/api/update/check":
@@ -1427,6 +1972,16 @@ class Handler(BaseHTTPRequestHandler):
             "/api/review/geo": lambda: geo_images(opts),
             "/api/review/mark": lambda: review_mark(opts),
             "/api/qa/start": lambda: qa_start(opts),
+            "/api/fixes/load": lambda: fixes_load(opts),
+            "/api/fixes/export": lambda: fixes_export(opts),
+            "/api/fixes/read": lambda: fix_read(opts),
+            "/api/fixes/links": lambda: fix_links(opts),
+            "/api/fixes/geo": lambda: fix_geo(opts),
+            "/api/fixes/mine": lambda: fixes_mine(opts),
+            "/api/fixes/open": lambda: open_in_main_chrome(opts),
+            "/api/fixes/shot": lambda: fix_shot(opts),
+            "/api/fixes/apply": lambda: fix_apply(opts),
+            "/api/fixes/reopen": lambda: fix_reopen(opts),
             "/api/update/install": update_install,
             "/api/update/dismiss": lambda: (mp_update.dismiss_notes(HERE) or ({"ok": True}, 200)),
             "/api/run/save": save_issue,
@@ -1454,8 +2009,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)       # binds the port: a second copy on the same port stops here, before anything is closed
     print(f"MP Assistance UI: {UI_URL}  (Ctrl+C to stop)")
+    if "--with-chrome" in sys.argv:
+        left = reset_tool_chrome()
+        if left == "closed":
+            print("Closed a tool Chrome left over from an earlier run, so the windows open cleanly.")
+        elif left == "in use":
+            print("The tool's Chrome is already open and the other copy of the app is using it: leaving it as it is.")
     chrome_state["up"] = chrome_probe()          # so the very first status is right
     threading.Thread(target=watch_chrome, daemon=True).start()
     if "--with-chrome" in sys.argv:  # app mode: open the tool's Chrome windows, quit when the tool window closes
@@ -1466,7 +2027,8 @@ if __name__ == "__main__":
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping: closing the tool's Chrome and any run in progress.")
+        print("\nStopping.")
+    finally:                                     # Ctrl+C, a closed Terminal, and any crash of the server end up here
         stop_run()
-        close_tool_chrome()
+        print("Stopped: " + shutdown_tool_chrome() + ".")
         shutil.rmtree(GEO_DIR, ignore_errors=True)
