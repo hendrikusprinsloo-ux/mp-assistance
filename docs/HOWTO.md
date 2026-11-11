@@ -120,7 +120,7 @@ The app always opens on this tab.
 2. **2. Results CSV:** the newest results file is usually loaded for you (see *Default runs folder* below). Otherwise click **Choose file…** and pick
    the results CSV. The app also remembers the file you last chose, so a page reload does not empty it.
 3. Optional: tick **Dry run (preview only)** to see what would be processed without touching Parity Manager, or set **Limit rows** (left empty, it loads all the remaining rows).
-4. Click **Start**. The page scrolls down smoothly to the **3. Run** card. For each eligible row the tool fills the Parity Manager form in Chrome and
+4. Click **Start**. (To work only on the extra issues, see **Start with extra issues only** below.) The page scrolls down smoothly to the **3. Run** card. For each eligible row the tool fills the Parity Manager form in Chrome and
    shows a **card** there with:
    - the values as the form holds them (rates, cancellations, channel, platform, files attached), each with a ✓ or ✗ against what was meant;
    - both screenshots.
@@ -130,9 +130,10 @@ The app always opens on this tab.
 5. Check the card, then click one of:
    - **Save issue**: clicks Parity Manager's Save. The tool first re-checks the dashboard and refuses, with a reason, if the save would
      go over the limit or double up an existing issue.
-   - **Decline**: use it for an issue that should not be raised, for example one that cannot be confirmed. Declining (or skipping) an issue frees its place, so the next row of that channel is shown. Type a reason in the box next to it
+   - **Decline**: use it for an issue that should not be raised, for example one that cannot be confirmed. Declining an issue frees its place, so the next row of that channel is shown. Type a reason in the box next to it
      first if you like. The issue is recorded in the done file as `declined` with your note, and it **does not come back**: not in later runs,
      not on the Mobile App tab and not in QA.
+   - **Skip**: leaves the issue for now. It is not recorded as declined, so it can come back in a later run. It frees that channel's place, so the next row of that channel is shown.
    - **Stop run**: stops after leaving the current issue unsaved.
 6. When you are done, open the **QA** tab to check what was saved (see section 6).
 
@@ -145,6 +146,11 @@ of how many issues were saved and declined. Each new issue's screenshots start a
 are never shown. These rows are not written to the done file, so they stay available on the Mobile App tab (a Decline, by contrast, is recorded and never comes back). When the run ends the Log says how many rows were left out, that they are still available for Mobile App, and the name of the file that lists them.
 That file is `left_out_<results name>.csv`, saved next to the results file. It has one line for every row that was left out, with the time, the channel, the brand code, the arrival date, the subscription id, the hotel name, the client and the reason
 (for example that the channel was full for today). It is not a done file, so it does not stop those rows coming back on the Mobile App tab.
+
+**Start with extra issues only** (next to **Start**) loads only the rows past each channel's limit, for example the 17th and later Expedia rows when the Expedia limit is 16, and leaves out the rows within the limit.
+**Save issue** still checks the dashboard first, so a limit is still enforced when you save.
+
+Each tab shows only its own kind of run: a web run shows on the Upload tab and a Mobile App run on the Mobile App tab.
 
 **Default runs folder:** under *2. Results CSV*, click **Set default runs folder…** and pick the folder that holds your run folders (for example
 `parity_scraper_screenshots`). Each time the app starts it loads the newest `results_….csv` in it, chosen by the time in the file name.
@@ -177,7 +183,7 @@ Choice only. Booking.com and Expedia only, limit one of each per day.
    (year, month and day folders are made if they are missing). It uses the Google sign-in of the tool's Chrome and needs the tool's Chrome to be running. The message beside the button
    says how many were sent, and links to the folder.
 6. Optional: **Check all links** follows every row's link and marks each QR button ✓ or ✗ (hover a ✗ for the reason) before you head to your phone.
-7. Click **Upload ready issues**. The forms are filled with Channel platform set to Mobile App, and the card, **Save issue**, **Decline**
+7. Click **Upload ready issues**. The forms are filled with Channel platform set to Mobile App, and the card, **Save issue**, **Decline**, **Skip**
    and Log work exactly as on the Upload tab, including the smooth scroll to the Run card and the **Tick / Untick** switch for cancellations.
    The table keeps your cursor and anything you have typed while the page refreshes in the background. Choosing a results file glides
    to the **2. Issues** list.
