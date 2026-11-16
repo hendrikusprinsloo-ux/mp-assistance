@@ -533,6 +533,51 @@ def fixes_export(opts):
             "not_fixed": len(problems) - sum(1 for i in problems if i in times)}, 200
 
 
+def extras_export(csv_arg, chain):
+    """Export extra issues: a zip with a results CSV holding only the rows past each channel's limit (marked extra_issue = yes, so
+    'Start with extra issues only' loads exactly them) and the screenshots those rows use. Returns (bytes, name, saved_path) or (None, error, status)."""
+    import zipfile
+    path = Path(csv_arg or "")
+    if path.suffix.lower() != ".csv" or not path.is_file():
+        return None, "Choose a results CSV on the Upload tab first.", 400
+    if chain not in CHAINS:
+        return None, "Choose a chain first.", 400
+    caps = {ch: c["cap"] for ch, c in limits_for(chain)["channels"].items() if c["cap"]}
+    try:
+        extra = mp_upload.extra_rows(path, caps)
+        fields, raw = mp_upload.raw_rows(path)
+        resolved = dict(mp_upload.load_rows(path))
+    except (OSError, ValueError, KeyError) as e:
+        return None, f"Could not read the results file: {e}", 400
+    if not extra:
+        return None, "There are no extra issues to export: no eligible rows are past a channel's limit (rows already saved or declined are left out).", 409
+    out_fields = fields + ([] if mp_upload.EXTRA_COLUMN in fields else [mp_upload.EXTRA_COLUMN])
+    text = io.StringIO()
+    writer = csv.DictWriter(text, out_fields, lineterminator="\n")
+    writer.writeheader()
+    shots = {}
+    for row_no, _ in extra:
+        writer.writerow({**raw[row_no - 3], mp_upload.EXTRA_COLUMN: "yes"})
+        for column in mp_upload.SHOT_COLUMNS:
+            shot = Path(resolved[row_no].get(column) or "")
+            if shot.name and shot.is_file():
+                shots[shot.name] = shot
+    name = f"extra_issues_{path.stem}"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:       # PNGs are already compressed
+        z.writestr(f"{name}.csv", "\ufeffsep=,\n" + text.getvalue())
+        for arc, shot in shots.items():
+            z.write(shot, arc)
+    data = buf.getvalue()
+    saved = ""
+    try:
+        (path.parent / f"{name}.zip").write_bytes(data)           # a copy next to the results file
+        saved = str(path.parent / f"{name}.zip")
+    except OSError:
+        pass
+    return data, f"{name}.zip", saved, len(extra), len(shots)
+
+
 def problems_file(name):
     """The bytes of an exported qa-problems file, for a download. Only files of that exact name pattern in qa_from_dashboard are served."""
     if not PROBLEMS_NAME.fullmatch(name or ""):
@@ -1899,6 +1944,13 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/runs/latest":
             body, status = latest_results_reply()
             return self.reply(body, status)
+        if url.path == "/api/extras/export":
+            q = parse_qs(url.query)
+            got = extras_export(q.get("csv", [""])[0], q.get("chain", [""])[0])
+            if got[0] is None:
+                return self.reply({"error": got[1]}, got[2])
+            data, name, saved, count, nshots = got
+            return self.reply(data, ctype="application/zip", headers={"X-Report-Name": name, "X-Report-Path": saved, "X-Extra-Count": str(count), "X-Shot-Count": str(nshots)})
         if url.path == "/api/fixes/export-file":
             name = parse_qs(url.query).get("name", [""])[0]
             body = problems_file(name)

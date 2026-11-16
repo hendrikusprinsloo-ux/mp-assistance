@@ -254,6 +254,7 @@
     <div class="actions">
       <button class="primary" id="runBtn">Start</button>
       <button id="extrasBtn" title="Load only the issues past each channel's limit (for example the 17th to 20th Expedia row), skipping the ones within it">Start with extra issues only</button>
+      <button id="exportExtrasBtn" title="Save a zip with a results CSV of only the rows past each channel's limit, plus their screenshots, to check them separately or hand them to someone else">Export extra issues</button>
       <button id="stopBtn" disabled>Stop</button>
       <span id="runState" class="hint" style="margin:0"></span>
       <span id="limitLine" class="hint" style="margin:0"></span>
@@ -1649,6 +1650,22 @@ function startRun(extras_only) {
 }
 $("runBtn").onclick = () => startRun(false);
 $("extrasBtn").onclick = () => startRun(true);
+$("exportExtrasBtn").onclick = async () => {
+  const csv = $("csvSelect").value;
+  if (!csv) return alert("No results CSV selected");
+  $("exportExtrasBtn").disabled = true; $("runState").textContent = "Building the zip…";
+  try {
+    const res = await fetch("/api/extras/export?csv=" + enc(csv) + "&chain=" + enc(chain));
+    if (!res.ok) throw new Error((await res.json()).error);
+    const saved = res.headers.get("X-Report-Path"), count = res.headers.get("X-Extra-Count");
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = res.headers.get("X-Report-Name") || "extra_issues.zip";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    $("runState").textContent = `Exported ${count} extra issue${count === "1" ? "" : "s"}.` + (saved ? ` A copy was saved as ${saved}` : " It could not be saved next to the results file.");
+  } catch (e) { $("runState").textContent = ""; fail(e); }
+  $("exportExtrasBtn").disabled = false;
+};
 $("quitAppBtn").onclick = () => {
   if (!confirm("Stop the tool server?")) return;
   api("/api/quit", {}).then(() => {
