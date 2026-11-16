@@ -78,7 +78,7 @@ Have these ready each time you work:
    **which Google account the tool's Chrome is signed into**, so you can confirm step 3 worked: it should read "Chrome is signed in as" your Lighthouse address.
    If it shows another address, or says no account, go back to step 3. The app only tells you; it does not stop you continuing.
 5. After sign-in the app asks **What are you doing today?** Choose **Work on issues** to raise issues (section 3 onwards) or **QA only** to just check issues (section 6).
-   **QA only** hides the Upload and Mobile App tabs and the chain popup, and works out the chain from the QA file you give it. The choice is remembered. The button in the top corner,
+   **QA only** hides the Upload and Mobile App tabs and the chain popup, and works out the chain from the QA file you give it. The app asks this at every start, after sign-in. The button in the top corner,
    **Work on issues · change** or **QA only · change**, switches between them.
 6. Closing the tool window stops the app. So does **Quit app** in the top corner, after it asks you to confirm.
 
@@ -194,9 +194,11 @@ Choice only. Booking.com and Expedia only, limit one of each per day.
 
 The QA tab checks that the values on the issues themselves match the Lighthouse screenshots. You confirm each one.
 
-1. Open the **QA** tab. It loads **today's confirmed issues for the chosen chain** from the dashboard by itself. (**Load from the dashboard**
+1. Open the **QA** tab. In normal mode it loads **today's confirmed issues for the chosen chain** from the dashboard by itself. (**Load from dashboard**
    reloads the list.)
-2. Optional: if a colleague has already QAed some of them, click **Skip issues from a QA cache…** and choose their `qa-cache_….csv`
+   The **Dashboard chain** list next to that button picks which chain to read from the dashboard. It does not change the chain used on the Upload tab. It starts on the chain you chose at sign-in; in **QA only** mode
+   it starts on **From the QA file** (the chain is read from the QA file), and you can pick a chain and load straight from the dashboard without a QA file. Picking a chain does not load by itself: click **Load from dashboard**.
+2. Optional: if a colleague has already QAed some of them, click **Skip issues in a QA cache…** and choose their `qa-cache_….csv`
    (you can add several) or their `COMPLETED_qa_….csv`. Issues they marked **Looks right** are left out; ones marked **Problem** stay in. A line shows how many were skipped.
    To look at only some issues, click **Only these issues…** and choose a QA file: the tab then lists just the issues in it. Use this to recheck the Problems you exported from the QA Fixes tab.
 3. Step through the issues with **‹** and **›**; the page glides smoothly to the top of each issue's card. For each one:
@@ -211,7 +213,7 @@ The QA tab checks that the values on the issues themselves match the Lighthouse 
 6. When every issue is marked, the page glides down to the QA report and **Download QA report** unlocks. The results file is kept as `qa_<name>.csv` while issues remain (unmarked ones
    show "Pending") and becomes `COMPLETED_qa_<name>.csv` when finished.
 
-If you restart the app during QA, the tab loads the list again. Your marks are kept in the cache file; choose it under **Skip issues** to leave those out.
+If you restart the app during QA, the tab loads the list again. Your marks are kept in the cache file; choose it under **Skip issues in a QA cache…** to leave those out.
 
 [Back to contents](#mp-assistance-how-to)
 
@@ -219,7 +221,7 @@ If you restart the app during QA, the tab loads the list again. Your marks are k
 
 Use the **QA Fixes** tab for issues you marked **Problem**. It changes the real issue in Parity Manager, so check before you apply.
 
-1. **1. The Problem issues:** click **Choose a QA file…** and pick a `qa-cache_….csv` or a `COMPLETED_qa_….csv`, or click **Use today's QA** for today's QA of the chosen chain. The Problems are listed below. If you want to retake a screenshot,
+1. **1. The Problem issues:** click **Choose a QA file…** and pick a `qa-cache_….csv` or a `COMPLETED_qa_….csv`, or click **Use today's QA** for today's QA of the chain shown on the QA tab. The Problems are listed below. If you want to retake a screenshot,
    also click **Choose the day's results file…**: it holds the brand and channel page links.
 2. Pick an issue from the list. **2. Fix the issue** shows its current values and the two Lighthouse screenshots.
 3. Change what is wrong, leaving the rest as it is:
