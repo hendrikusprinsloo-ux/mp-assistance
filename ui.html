@@ -145,7 +145,7 @@
       <button class="primary" id="modeWork">Work on issues</button>
       <button id="modeQa">QA only</button>
     </div>
-    <div class="hint" id="modeMsg">Your choice is remembered; Change it any time with the button in the top corner.</div>
+    <div class="hint" id="modeMsg">You can change this any time with the button in the top corner.</div>
   </div>
 </div>
 <div id="chainGate" class="gate" hidden>
@@ -334,15 +334,19 @@
     <h2>Review</h2>
     <div class="actions" style="margin:0 0 10px">
       <button id="qaPickBtn">Choose done file…</button>
-      <button id="qaFollowBtn" title="Use the file chosen on the Upload tab">Use the Upload file</button>
-      <button id="qaDashBtn" title="Pull today's confirmed issues for the chosen chain from the Mobile Parity dashboard">Load from the dashboard</button>
+      <button id="qaFollowBtn" title="Use the file chosen on the Upload tab">Use Upload tab file</button>
+      <label style="display:inline-flex;align-items:center;gap:8px;margin:0;font-weight:400" title="The chain to read from the dashboard. Changing it does not change the chain used on the Upload tab.">Dashboard chain <select id="qaChainSel" style="width:auto;padding:7px 10px;font-weight:400"></select></label>
+      <button id="qaDashBtn" title="Pull today's confirmed issues for the chosen chain from the Mobile Parity dashboard">Load from dashboard</button>
       <button id="qaOnlyBtn" title="Recheck: list only the issues in a QA file, for example the Problems exported from QA Fixes">Only these issues…</button>
-      <button id="qaSkipBtn" title="Leave out issues already marked OK in a QA cache file someone gave you">Skip issues from a QA cache…</button>
-      <span id="qaCsv" class="hint" style="margin:0;word-break:break-all">none chosen</span>
+      <button id="qaSkipBtn" title="Leave out issues already marked OK in a QA cache file someone gave you">Skip issues in a QA cache…</button>
+      <span id="qaCsv" class="hint" style="margin:0;word-break:break-all">No file chosen</span>
     </div>
     <div id="qaSkipMsg" class="hint" style="margin:0 0 10px" hidden></div>
     <input type="hidden" id="qaCsvPath">
-    <div class="hint" style="margin:0 0 10px">Choose the <b>done file</b> of a run (<code>done_….csv</code>), including one sent to you by someone else. It holds the issue links, so the issues and Lighthouse screenshots load from Parity Manager as long as you are signed in there. You can also choose a results CSV and its done file is found next to it. Each file loaded here starts a <b>fresh</b> QA: marks from an earlier QA of it are set aside, renamed with a timestamp. This does not change the file on the Upload tab.<br><b>Load from the dashboard</b> instead pulls the issues Parity Manager has confirmed today for the chosen chain (the subscription links carry the issue ids). Their values are read from the issues themselves, and you confirm they match the Lighthouse screenshots.</div>
+    <div class="hint" style="margin:0 0 6px"><b>Done file:</b> choose the done file of a run (<code>done_….csv</code>), including one sent to you by someone else. It holds the issue links, so the issues and Lighthouse screenshots load from Parity Manager while you are signed in there. You can also choose a results CSV, and its done file is found next to it.</div>
+    <div class="hint" style="margin:0 0 6px"><b>Load from dashboard:</b> pulls the issues Parity Manager has confirmed today for the chain picked next to the button. Their values are read from the issues themselves, and you confirm they match the Lighthouse screenshots.</div>
+    <div class="hint" style="margin:0 0 6px"><b>Only these issues</b> rechecks just the issues in a QA file, for example the Problems exported from QA Fixes. <b>Skip issues in a QA cache</b> leaves out issues already marked OK in a QA cache file.</div>
+    <div class="hint" style="margin:0 0 10px">Each file loaded here starts a <b>fresh</b> QA: marks from an earlier QA of it are set aside, renamed with a timestamp. This does not change the file on the Upload tab.</div>
     <div id="revEmpty" class="hint" style="margin:0"></div>
     <div id="revCard" hidden>
       <div class="actions" style="margin:0 0 10px">
@@ -581,7 +585,7 @@ $("pickBtn").onclick = () => withDialog(null, async () => {
 async function loadSettings() {
   const s = await api("/api/settings");
   chains = s.chains; savedChain = s.chain; appChain = s.app_chain; sfAccounts = s.sf_accounts;
-  $("versionTag").textContent = s.version ? "v" + s.version : "";
+  fillQaChainSel(); $("versionTag").textContent = s.version ? "v" + s.version : "";
   applyTheme(s.theme);
   // windows are only arranged when the user clicks Arrange windows
 }
@@ -638,7 +642,7 @@ async function loadReview(full) {
 
 function updateQaReport() {
   const n = revItems.length, done = revItems.filter(i => i.review).length;
-  $("qaCsv").textContent = qaCsvValue() ? qaCsvValue().split("/").slice(-2).join(" / ") : "none chosen";
+  $("qaCsv").textContent = qaCsvValue() ? qaCsvValue().split("/").slice(-2).join(" / ") : "No file chosen";
   $("qaCsv").title = qaCsvValue();
   $("qaExport").disabled = !(n > 0 && done === n);
   $("qaMsg").textContent = n === 0 ? "No saved issues yet." : done === n ? "All issues reviewed." : `${n - done} of ${n} issues still need QA.`;
@@ -895,7 +899,7 @@ $("chainContinue").onclick = async () => {
   body.channels = Object.fromEntries(WEB_CH.map(ch => [ch, $("capCh_" + ch).value || 0]));
   try { await api("/api/limits", body); await api("/api/chain", { chain: picked }); } catch (e) { return fail(e); }
   const changed = picked !== chain;
-  chain = picked; $("chainGate").hidden = true;
+  chain = picked; qaPick = ""; fillQaChainSel(); $("chainGate").hidden = true;
   await refreshLimits(); applyChain();
   if (changed && !$("panelApp").hidden) loadApp().catch(() => {});
 };
@@ -1144,28 +1148,36 @@ $("qaFollowBtn").onclick = () => {
 };
 let qaSkipFiles = [], qaOnlyFiles = [];
 const slugOf = c => c.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-const qaChainNow = () => qaOnly ? qaChain : chain;           // QA-only has no chosen chain: it is the one the QA file was for
+let qaPick = "";                                              // the chain picked on the QA tab itself ("" = the Upload tab's chain, or in QA-only the one read from the file)
+const qaChainNow = () => qaPick || (qaOnly ? qaChain : chain);   // QA-only without a pick: the chain the QA file was for
+function fillQaChainSel() {
+  const sel = $("qaChainSel"), want = qaPick || (qaOnly ? qaChain : chain);
+  sel.innerHTML = (qaOnly ? '<option value="">From the QA file</option>' : "") + chains.map(c => `<option>${c}</option>`).join("");
+  sel.value = want || "";
+}
+$("qaChainSel").onchange = () => { qaPick = $("qaChainSel").value; if (!qaOnly && qaPick === chain) qaPick = ""; };
 async function loadDashboardQa(force) {
   // opens on today's confirmed issues for the chain; coming back to the tab keeps the marks made so far
-  if (qaOnly && !qaChain && !qaSkipFiles.length && !qaOnlyFiles.length) {                 // nothing to detect from yet: say what to do, plainly
-    $("revEmpty").textContent = "QA only: choose a QA file with Skip issues from a QA cache… (a qa-cache or a COMPLETED file) and the chain is worked out from it.";
-    $("qaCsv").textContent = "none chosen"; return;
+  if (qaOnly && !qaPick && !qaChain && !qaSkipFiles.length && !qaOnlyFiles.length) {                 // nothing to detect from yet: say what to do, plainly
+    $("revEmpty").textContent = "QA only: pick a chain and choose Load from dashboard. Or choose a QA file (a qa-cache or COMPLETED file) with Skip issues in a QA cache… and the chain is read from it.";
+    $("qaCsv").textContent = "No file chosen"; return;
   }
-  if (!qaOnly && !chain) return;
+  if (!qaOnly && !qaChainNow()) return;
   const same = qaChainNow() && qaCsvValue().includes(`done_dashboard_${slugOf(qaChainNow())}_${new Date().toLocaleDateString("sv")}${qaOnlyFiles.length ? "_recheck" : ""}`);
   if (same && !force) return;
   $("qaCsv").textContent = "Reading the dashboard…";
   try {
-    const r = await api("/api/qa/dashboard", { chain: qaOnly ? "" : chain, skip: qaSkipFiles, only: qaOnlyFiles });
+    const r = await api("/api/qa/dashboard", { chain: qaPick || (qaOnly ? "" : chain), skip: qaSkipFiles, only: qaOnlyFiles });
     if (qaOnly) { qaChain = r.chain; }
+    fillQaChainSel();
     await setQaCsv(r.path, false);
     $("qaSkipMsg").hidden = !qaSkipFiles.length && !qaOnlyFiles.length;
     if (qaOnlyFiles.length) {
       $("qaSkipMsg").textContent = `Recheck: only the ${r.count} issue${r.count === 1 ? "" : "s"} from ${qaOnlyFiles.map(f => f.split("/").pop()).join(", ")}`
-        + (r.missing ? ` (${r.missing} in the file ${r.missing === 1 ? "is" : "are"} not on today's dashboard)` : "") + (qaSkipFiles.length ? `, with ${r.skipped} already QAed left out` : "") + ". Choose Load from the dashboard again to go back to the full list.";
+        + (r.missing ? ` (${r.missing} in the file ${r.missing === 1 ? "is" : "are"} not on today's dashboard)` : "") + (qaSkipFiles.length ? `, with ${r.skipped} already QAed left out` : "") + ". Choose Load from dashboard again to go back to the full list.";
     } else
     $("qaSkipMsg").textContent = `${r.detected ? `Chain: ${r.chain} (read from the file). ` : ""}Skipped ${r.skipped} already QAed (from ${qaSkipFiles.map(f => f.split("/").pop()).join(", ")}), ${r.count} to go.`;
-  } catch (e) { $("qaCsv").textContent = "none chosen"; $("revEmpty").textContent = e.message; if (qaOnly) qaSkipFiles = []; }
+  } catch (e) { $("qaCsv").textContent = "No file chosen"; $("revEmpty").textContent = e.message; if (qaOnly) qaSkipFiles = []; }
   updateQaReport();
 }
 $("qaDashBtn").onclick = () => { qaOnlyFiles = []; loadDashboardQa(true).catch(fail); };      // the plain button always goes back to the full list
@@ -1706,23 +1718,19 @@ async function checkLogin() {
 function closeGate() { $("loginGate").hidden = true; clearInterval(gateTimer); chooseMode().catch(fail); }   // the choice of what you are doing comes next
 async function chooseMode() {
   await settingsReady;
-  let saved = ""; try { saved = localStorage.getItem("mpMode") || ""; } catch (e) { /* not remembered */ }
-  if (saved === "qa") return enterQaOnly();
-  if (saved === "work") return enterWork();
   $("modeGate").hidden = false;
 }
 function enterWork() { $("modeGate").hidden = true; setMode(false); openChainGate().catch(fail); }
 function enterQaOnly() { $("modeGate").hidden = true; setMode(true); }
 function setMode(qa) {
-  qaOnly = qa;
-  try { localStorage.setItem("mpMode", qa ? "qa" : "work"); } catch (e) { /* not remembered */ }
+  qaOnly = qa; qaPick = ""; fillQaChainSel();
   $("tabUpload").hidden = qa; $("tabApp").hidden = qa || chain !== appChain;
   $("chainBtn").hidden = qa; $("dashBtn").hidden = qa; $("ignoreBtn").hidden = qa; $("modeBtn").textContent = qa ? "QA only · change" : "Work on issues · change";
   if (qa) { $("capError").hidden = true; showTab("qa"); }
   else if ($("panelQa").hidden === false && !chain) { /* stays on the QA tab until a chain is chosen */ }
 }
 $("modeWork").onclick = enterWork; $("modeQa").onclick = enterQaOnly;
-$("modeBtn").onclick = () => { try { localStorage.removeItem("mpMode"); } catch (e) { /* ignore */ } $("modeGate").hidden = false; };
+$("modeBtn").onclick = () => { $("modeGate").hidden = false; };
 $("gateOpen").onclick = () => api("/api/chrome", {}).catch(fail);
 $("gateCheck").onclick = () => { $("gateMsg").textContent = "Checking…"; checkLogin(); };
 $("gateSkip").onclick = closeGate;
