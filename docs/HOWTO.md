@@ -150,6 +150,12 @@ That file is `left_out_<results name>.csv`, saved next to the results file. It h
 **Start with extra issues only** (next to **Start**) loads only the rows past each channel's limit, for example the 17th and later Expedia rows when the Expedia limit is 16, and leaves out the rows within the limit.
 **Save issue** still checks the dashboard first, so a limit is still enforced when you save.
 
+**Export extra issues** (next to it) saves a zip called `extra_issues_<results name>.zip`. It holds a results CSV with only the rows past each channel's limit
+(rows already saved or declined in the done file are left out), marked with `extra_issue` = `yes` in a column of its own, and the screenshots those rows use, all in one flat folder.
+The zip downloads in your browser and a copy is also saved next to the results file; the message beside the button says where. If no rows are past a limit, it says there is nothing to export.
+To check the extras somewhere else, for example on another computer or by someone else: unzip it, load the CSV on the Upload tab and click **Start with extra issues only**. It loads exactly the marked rows,
+and finds the screenshots by file name next to the CSV.
+
 Each tab shows only its own kind of run: a web run shows on the Upload tab and a Mobile App run on the Mobile App tab.
 
 **Default runs folder:** under *2. Results CSV*, click **Set default runs folder…** and pick the folder that holds your run folders (for example
