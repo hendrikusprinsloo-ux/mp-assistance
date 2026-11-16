@@ -80,6 +80,34 @@ def load_rows(csv_path):
 
 
 SHOT_COLUMNS = ("screenshot_path", "branddotcom_screenshot_path")
+EXTRA_COLUMN = "extra_issue"      # added by Export extra issues: "yes" marks the rows that were past their channel's limit
+
+
+def raw_rows(csv_path):
+    """(fieldnames, rows) exactly as written in the results file (no screenshot path changed), for writing a smaller copy of it."""
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        lines = f.readlines()
+    if lines and lines[0].strip().lower().startswith("sep="):
+        lines = lines[1:]
+    reader = csv.DictReader(lines)
+    return list(reader.fieldnames or []), list(reader)
+
+
+def extra_rows(csv_path, caps):
+    """The rows past each channel's limit: [(row_no, row)] for the eligible rows after the first caps[channel] of that channel, leaving out
+    rows already saved or declined in the file's done log. The same rows 'Start with extra issues only' loads."""
+    log_path = Path(csv_path).with_name(f"done_{Path(csv_path).stem}.csv")
+    already = {r["key"] for r in read_log(log_path) if r.get("outcome") in ("saved", "declined")} if log_path.exists() else set()
+    position, out = {}, []
+    for row_no, row in load_rows(csv_path):
+        plan, _ = plan_for(row, "web", None)
+        if plan is None:
+            continue
+        channel = row["OTA_name"].strip().lower()
+        position[channel] = position.get(channel, 0) + 1
+        if channel in caps and position[channel] > caps[channel] and row_key(row) not in already:
+            out.append((row_no, row))
+    return out
 
 
 def local_shot(path, folder):
@@ -478,12 +506,14 @@ def main():
     taken_by_channel = {}
     extras_after = json.loads(args.extras_after) if args.extras_after and not app else {}
     position = {}
-    for row_no, row in load_rows(args.csv):
+    all_rows = load_rows(args.csv)
+    flagged = any((r.get(EXTRA_COLUMN) or "").strip().lower() == "yes" for _, r in all_rows)   # an exported extras file says which rows they are
+    for row_no, row in all_rows:
         plan, problems = plan_for(row, args.platform, app_inputs.get(row_key(row)))
         if plan is not None and extras_after:       # extras only: the first n rows of a channel (done or not) are the ones within its limit
             ch = row["OTA_name"].strip().lower()
             position[ch] = position.get(ch, 0) + 1
-            if ch not in extras_after or position[ch] <= extras_after[ch]:
+            if (row.get(EXTRA_COLUMN) or "").strip().lower() != "yes" if flagged else (ch not in extras_after or position[ch] <= extras_after[ch]):
                 plan, problems = None, None
         if plan is None:
             why = skip_reason(problems) if problems is not None else "within the channel's limit (extras only)"
