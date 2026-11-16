@@ -152,15 +152,18 @@ That file is `left_out_<results name>.csv`, saved next to the results file. It h
 
 **Export extra issues** (next to it) saves a zip called `extra_issues_<results name>.zip`. It holds a results CSV with only the rows past each channel's limit
 (rows already saved or declined in the done file are left out), marked with `extra_issue` = `yes` in a column of its own, and the screenshots those rows use, all in one flat folder.
-The zip downloads in your browser and a copy is also saved next to the results file; the message beside the button says where. If no rows are past a limit, it says there is nothing to export.
+The zip downloads in your browser and a copy is also saved next to the results file; the message under the Start row says where, and errors show there in red. If no rows are past a limit, it says there is nothing to export.
 To check the extras somewhere else, for example on another computer or by someone else: unzip it, load the CSV on the Upload tab and click **Start with extra issues only**. It loads exactly the marked rows,
-and finds the screenshots by file name next to the CSV.
+and finds the screenshots by file name next to the CSV. (**Choose file…** also takes the zip itself, so you can skip unzipping.) Exporting from an extras file again exports its marked rows and keeps the file name.
 
 Each tab shows only its own kind of run: a web run shows on the Upload tab and a Mobile App run on the Mobile App tab.
 
 **Default runs folder:** under *2. Results CSV*, click **Set default runs folder…** and pick the folder that holds your run folders (for example
 `parity_scraper_screenshots`). Each time the app starts it loads the newest `results_….csv` in it, chosen by the time in the file name.
-**Load latest results** does the same whenever you want, and **Choose file…** still lets you pick any CSV. If macOS says the app cannot look inside
+**Load latest results** does the same whenever you want, and **Choose file…** still lets you pick any CSV.
+**Choose file…** (here, on the Mobile App tab and for the results file on QA Fixes) also accepts a **zip** that holds a results CSV and its screenshots, such as the zip made by **Export extra issues** or a zipped run folder.
+The app unpacks it into a folder next to the zip, named after the zip, and loads the CSV inside; choosing the same zip again reuses the unpacked files. A zip with no results CSV, or with more than one, gives an error message.
+So an extras zip can be used for web issues and for Mobile App issues without unzipping it by hand. The QA done-file pickers do not take zips. If macOS says the app cannot look inside
 the folder, open System Settings > Privacy & Security > Files and Folders (or Full Disk Access), switch it on for Terminal, and start the app again.
 
 [Back to contents](#mp-assistance-how-to)
@@ -228,7 +231,8 @@ If you restart the app during QA, the tab loads the list again. Your marks are k
 Use the **QA Fixes** tab for issues you marked **Problem**. It changes the real issue in Parity Manager, so check before you apply.
 
 1. **1. The Problem issues:** click **Choose a QA file…** and pick a `qa-cache_….csv` or a `COMPLETED_qa_….csv`, or click **Use today's QA** for today's QA of the chain shown on the QA tab. The Problems are listed below. If you want to retake a screenshot,
-   also click **Choose the day's results file…**: it holds the brand and channel page links.
+   also click **Add a results file…**: the day's results file holds the brand and channel page links, and an extra issues file or zip can be added too. Each file you choose is added to a list, and the app looks for an issue's links in each file in turn.
+   **Clear** empties the list of QA files and the list of results files.
 2. Pick an issue from the list. **2. Fix the issue** shows its current values and the two Lighthouse screenshots.
 3. Change what is wrong, leaving the rest as it is:
    - **Base shop rate** or **Channel shop rate**: type the right number.
@@ -247,6 +251,9 @@ Use the **QA Fixes** tab for issues you marked **Problem**. It changes the real 
 - **One issue per channel per subscription.** Parity Manager takes only one for a hotel on a channel. The same hotel on a different channel is fine.
 - **The dashboard is the record** of what is confirmed. If it cannot be read, the tool falls back to its own note of what this computer saved today
   and says so.
+- **While a run is going,** the buttons that change how it works are greyed out until it finishes: **Ignore limits**, the chain button, the work/QA-only button, the buttons that choose a file or folder (including **Load latest results** and **Use the Upload file**),
+  **Dry run** and **Limit rows**, **Start** and **Start with extra issues only**, **Check all links**, the QA tab's load and choose buttons and **Dashboard chain**, and **Apply the changes** on QA Fixes.
+  **Stop**, **Save issue**, **Skip**, **Decline**, the **Tick / Untick** buttons, **Export extra issues**, the tabs and **Quit app** stay available. The status line reads "Running… (settings and file choices are locked until it finishes)".
 - **File windows open one at a time.** When you click a button that opens a Finder window (such as **Choose file…**), the buttons that can open one are switched off until it is done, and a second click is ignored. If you do not see the window,
   check Finder or press Cmd + Tab, then finish or cancel it.
 - **Nothing is deleted.** Skipped and saved rows are recorded in `done_<name>.csv`; a re-run skips rows already saved.
