@@ -93,9 +93,10 @@ def save_theme(opts):
 
 
 CSV_TYPES = '{"public.comma-separated-values-text", "csv"}'
+CSV_OR_ZIP_TYPES = '{"public.comma-separated-values-text", "csv", "public.zip-archive", "zip"}'
 PHOTO_TYPES = '{"public.jpeg", "public.png", "public.heic", "jpg", "jpeg", "png", "heic"}'
 PICKS = {   # kind -> (prompt, file types, folder the dialog opens in)
-    "results": ("Choose the results CSV", CSV_TYPES, None),
+    "results": ("Choose the results CSV (or a zip with the CSV and its screenshots)", CSV_OR_ZIP_TYPES, None),
     "done": ("Choose the done file of a run (or its results CSV)", CSV_TYPES, None),
     "qacache": ("Choose a QA cache (qa-cache_….csv) or a COMPLETED QA file (COMPLETED_qa_….csv)", CSV_TYPES, None),
     "photo": ("Choose the phone screenshot (JPEG or PNG)", PHOTO_TYPES, Path.home() / "Downloads"),   # AirDrop lands in Downloads
@@ -204,6 +205,46 @@ def pick_file(kind):
     return path, None
 
 
+def unpack_results_zip(zip_path):
+    """A zip holding a results CSV and its screenshots (Export extra issues, or a zipped run folder) is unpacked into a folder next to it,
+    named after the zip, and the results CSV inside is returned. Files keep their places inside the zip, so the CSV and its screenshots stay
+    together. Returns (csv_path, folder) or raises ValueError with a plain message."""
+    import zipfile
+    zp = Path(zip_path)
+    try:
+        z = zipfile.ZipFile(zp)
+    except (zipfile.BadZipFile, OSError) as e:
+        raise ValueError(f"Could not open that zip: {e}")
+    with z:
+        dest = zp.with_suffix("")
+        names = [n for n in z.namelist() if not n.endswith("/") and "__MACOSX" not in n and not Path(n).name.startswith("._")]
+        csvs = [n for n in names if n.lower().endswith(".csv") and not Path(n).name.lower().startswith(("done_", "left_out_", "qa-", "completed_qa"))]
+        def is_results(n):
+            with z.open(n) as f:
+                head = f.read(4000).decode("utf-8-sig", "ignore")
+            return "OTA_name" in head and "brand_code" in head
+        csvs = [n for n in csvs if is_results(n)]
+        if len(csvs) != 1:
+            raise ValueError("That zip holds no results CSV." if not csvs else
+                             "That zip holds more than one results CSV: " + ", ".join(Path(n).name for n in csvs) + ". Unzip it and choose the one you want.")
+        try:
+            dest.mkdir(exist_ok=True)
+        except OSError as e:
+            raise ValueError(f"Could not make the folder {dest.name} next to the zip ({e.strerror}). Check that the app may write there.")
+        root = dest.resolve()
+        for n in names:
+            target = (dest / n).resolve()
+            if root not in target.parents:        # a path that climbs out of the folder is never written
+                continue
+            info = z.getinfo(n)
+            if target.is_file() and target.stat().st_size == info.file_size:
+                continue                           # already unpacked by an earlier choice
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(n) as src, open(target, "wb") as out:
+                shutil.copyfileobj(src, out)
+        return str(dest / csvs[0]), str(dest)
+
+
 def pick_csv(opts):
     if opts.get("kind") == "folder":
         path, error = pick_folder("Choose the folder that holds your run folders")
@@ -213,6 +254,12 @@ def pick_csv(opts):
         return {"error": error}, 500
     if path is None:
         return {"cancelled": True}, 200
+    if path.lower().endswith(".zip") and opts.get("kind") in (None, "", "results"):
+        try:
+            csv_path, folder = unpack_results_zip(path)
+        except ValueError as e:
+            return {"error": str(e)}, 400
+        return {"path": csv_path, "unpacked": folder}, 200
     if not path.lower().endswith(".csv"):
         return {"error": "Please choose a .csv file"}, 400
     return {"path": path}, 200
@@ -334,6 +381,8 @@ IGNORE_CAP = {"on": False}      # the "Ignore limits" button: kept in memory onl
 
 
 def set_ignore_cap(opts):
+    if alive(run_proc):
+        return {"error": "A run is in progress. Change Ignore limits when it has finished."}, 409
     IGNORE_CAP["on"] = bool(opts.get("on"))
     return {"ok": True, "ignore_cap": IGNORE_CAP["on"]}, 200
 
@@ -562,7 +611,7 @@ def extras_export(csv_arg, chain):
             shot = Path(resolved[row_no].get(column) or "")
             if shot.name and shot.is_file():
                 shots[shot.name] = shot
-    name = f"extra_issues_{path.stem}"
+    name = path.stem if path.stem.startswith("extra_issues_") else f"extra_issues_{path.stem}"      # re-exporting an extras file keeps its name
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:       # PNGs are already compressed
         z.writestr(f"{name}.csv", "\ufeffsep=,\n" + text.getvalue())
@@ -658,23 +707,30 @@ def fix_links(opts):
     if geo.startswith("https://") and (urlsplit(geo).hostname or "").endswith("mylighthouse.com"):
         links["geoinsight"] = geo
         links.update(links_from_geoinsight(geo))                  # brand and channel are rebuilt from the issue's own Geoinsight link
-    csv_path = results_csv(str(opts.get("results", ""))) if not ({"brand", "channel"} <= set(links)) else None      # a results file only fills what is missing
-    if csv_path is not None:
+    given = opts.get("results") or []                       # one results file or several (the day's file and an extra issues file)
+    paths = [results_csv(str(g)) for g in ([given] if isinstance(given, str) else given)]
+    paths = [p for p in paths if p is not None] if not ({"brand", "channel"} <= set(links)) else []      # a results file only fills what is missing
+    if paths:
         want = (str(opts.get("brand_code", "")).strip().lower(), str(opts.get("channel", "")).strip().lower(),
                 mp_upload.normalize_date(str(opts.get("arrival_date", ""))))
-        for _, row in mp_upload.load_rows(csv_path):
-            have = (row.get("brand_code", "").strip().lower(), row.get("OTA_name", "").strip().lower(),
-                    mp_upload.normalize_date(row.get("from_date", "")))
-            if have == want:
-                if "brand" not in links and row.get("branddotcom_url", "").startswith("http"):
-                    links["brand"] = row["branddotcom_url"]
-                if "channel" not in links and row.get("url", "").startswith("http"):
-                    links["channel"] = row["url"]
-                if "geoinsight" not in links and row.get("screenshots_url", "").startswith("http"):
-                    links["geoinsight"] = row["screenshots_url"]
+        found = False
+        for csv_path in paths:
+            for _, row in mp_upload.load_rows(csv_path):
+                have = (row.get("brand_code", "").strip().lower(), row.get("OTA_name", "").strip().lower(),
+                        mp_upload.normalize_date(row.get("from_date", "")))
+                if have == want:
+                    if "brand" not in links and row.get("branddotcom_url", "").startswith("http"):
+                        links["brand"] = row["branddotcom_url"]
+                    if "channel" not in links and row.get("url", "").startswith("http"):
+                        links["channel"] = row["url"]
+                    if "geoinsight" not in links and row.get("screenshots_url", "").startswith("http"):
+                        links["geoinsight"] = row["screenshots_url"]
+                    found = True
+                    break
+            if found:
                 break
-        else:
-            notes.append("That results file has no row for this issue.")
+        if not found:
+            notes.append("None of the results files has a row for this issue." if len(paths) > 1 else "That results file has no row for this issue.")
     elif not ({"brand", "channel"} <= set(links)):
         notes.append("Could not work out the brand and channel pages from this issue. Choose the day's results file to get them.")
     if "geoinsight" not in links and chrome_up():
@@ -1950,7 +2006,7 @@ class Handler(BaseHTTPRequestHandler):
             if got[0] is None:
                 return self.reply({"error": got[1]}, got[2])
             data, name, saved, count, nshots = got
-            return self.reply(data, ctype="application/zip", headers={"X-Report-Name": name, "X-Report-Path": saved, "X-Extra-Count": str(count), "X-Shot-Count": str(nshots)})
+            return self.reply(data, ctype="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"', "X-Report-Name": name, "X-Report-Path": saved, "X-Extra-Count": str(count), "X-Shot-Count": str(nshots)})
         if url.path == "/api/fixes/export-file":
             name = parse_qs(url.query).get("name", [""])[0]
             body = problems_file(name)

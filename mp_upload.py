@@ -99,13 +99,16 @@ def extra_rows(csv_path, caps):
     log_path = Path(csv_path).with_name(f"done_{Path(csv_path).stem}.csv")
     already = {r["key"] for r in read_log(log_path) if r.get("outcome") in ("saved", "declined")} if log_path.exists() else set()
     position, out = {}, []
-    for row_no, row in load_rows(csv_path):
+    rows = load_rows(csv_path)
+    flagged = any((r.get(EXTRA_COLUMN) or "").strip().lower() == "yes" for _, r in rows)     # already an extras file: its marked rows are the extras
+    for row_no, row in rows:
         plan, _ = plan_for(row, "web", None)
         if plan is None:
             continue
         channel = row["OTA_name"].strip().lower()
         position[channel] = position.get(channel, 0) + 1
-        if channel in caps and position[channel] > caps[channel] and row_key(row) not in already:
+        is_extra = (row.get(EXTRA_COLUMN) or "").strip().lower() == "yes" if flagged else (channel in caps and position[channel] > caps[channel])
+        if is_extra and row_key(row) not in already:
             out.append((row_no, row))
     return out
 

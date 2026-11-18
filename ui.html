@@ -259,6 +259,7 @@
       <span id="runState" class="hint" style="margin:0"></span>
       <span id="limitLine" class="hint" style="margin:0"></span>
     </div>
+    <div id="exportExtrasMsg" class="hint" style="margin:6px 0 0" hidden></div>
     <details id="confirmedList" style="margin-top:10px">
       <summary id="confirmedSummary" class="hint" style="cursor:pointer;margin:0">Confirmed on the dashboard today</summary>
       <table id="confirmedTable"></table>
@@ -410,7 +411,7 @@
       <span id="fixExportMsg" class="hint" style="margin:0"></span>
     </div>
     <div class="actions" style="margin:0 0 6px">
-      <button id="fixResultsBtn" title="The day's results file: it holds the brand and channel page links used to retake a screenshot">Choose the day's results file…</button>
+      <button id="fixResultsBtn" title="The day's results file, and an extra issues file or zip if you have one: they hold the brand and channel page links used to retake a screenshot. Each file you choose is added.">Add a results file…</button>
       <span id="fixResults" class="hint" style="margin:0;word-break:break-all">none chosen</span>
     </div>
     <table id="fixList" style="margin-top:8px"></table>
@@ -1209,7 +1210,7 @@ $("qaPickBtn").onclick = () => withDialog("qaCsv", async () => {
 
 
 /* ---- QA Fixes: the issues marked Problem, corrected on the issue itself ---- */
-let fixFiles = [], fixItems = [], fixCur = null, fixResults = "", fixOrig = {}, fixEdit = {}, fixShots = {}, fixLinks = {};
+let fixFiles = [], fixItems = [], fixCur = null, fixResults = [], fixOrig = {}, fixEdit = {}, fixShots = {}, fixLinks = {};
 const FIX_PLATFORMS = ["Desktop", "Mobile Web", "Mobile App"];
 const fixLabel = i => `${i.hotel_name || "Issue " + i.issue_id} · ${CHANNEL_NAMES[i.channel] || i.channel || ""}`;
 
@@ -1384,9 +1385,9 @@ $("fixMineBtn").onclick = async () => {
   try { const r = await api("/api/fixes/mine", { chain: qaChainNow() || chain }); fixFiles = [r.path]; await fixLoad(); }
   catch (e) { $("fixMsg").className = "hint problem"; $("fixMsg").textContent = e.message; }
 };
-$("fixClearBtn").onclick = () => { fixFiles = []; fixCur = null; $("fixCard").hidden = true; $("fixEmpty").hidden = false; fixLoad(); };
+$("fixClearBtn").onclick = () => { fixFiles = []; fixResults = []; $("fixResults").textContent = "none chosen"; fixCur = null; $("fixCard").hidden = true; $("fixEmpty").hidden = false; fixLoad(); };
 $("fixResultsBtn").onclick = () => withDialog("fixResults", async () => {
-  try { const r = await api("/api/pick", { kind: "results" }); if (r.cancelled) return; fixResults = r.path; $("fixResults").textContent = r.path.split("/").slice(-2).join(" / "); if (fixCur) loadFixLinks(fixCur).catch(() => {}); } catch (e) { fail(e); }
+  try { const r = await api("/api/pick", { kind: "results" }); if (r.cancelled) return; if (!fixResults.includes(r.path)) fixResults.push(r.path); $("fixResults").textContent = fixResults.map(f => f.split("/").slice(-2).join(" / ")).join(", "); if (fixCur) loadFixLinks(fixCur).catch(() => {}); } catch (e) { fail(e); }
 });
 
 $("revPrev").onclick = () => { revIdx--; renderReview(true); glideTo("revCard"); };
@@ -1653,7 +1654,7 @@ $("extrasBtn").onclick = () => startRun(true);
 $("exportExtrasBtn").onclick = async () => {
   const csv = $("csvSelect").value;
   if (!csv) return alert("No results CSV selected");
-  $("exportExtrasBtn").disabled = true; $("runState").textContent = "Building the zip…";
+  $("exportExtrasBtn").disabled = true; $("exportExtrasMsg").hidden = false; $("exportExtrasMsg").className = "hint"; $("exportExtrasMsg").textContent = "Building the zip…";
   try {
     const res = await fetch("/api/extras/export?csv=" + enc(csv) + "&chain=" + enc(chain));
     if (!res.ok) throw new Error((await res.json()).error);
@@ -1661,9 +1662,11 @@ $("exportExtrasBtn").onclick = async () => {
     const url = URL.createObjectURL(await res.blob());
     const a = document.createElement("a");
     a.href = url; a.download = res.headers.get("X-Report-Name") || "extra_issues.zip";
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    $("runState").textContent = `Exported ${count} extra issue${count === "1" ? "" : "s"}.` + (saved ? ` A copy was saved as ${saved}` : " It could not be saved next to the results file.");
-  } catch (e) { $("runState").textContent = ""; fail(e); }
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);     // a big zip is read after the click: revoking at once can lose the file name
+    $("exportExtrasMsg").className = "hint good";       // its own line: the run status above is rewritten every second and would wipe this
+    $("exportExtrasMsg").textContent = `Exported ${count} extra issue${count === "1" ? "" : "s"}. The zip was downloaded` + (saved ? ` and a copy saved as ${saved}` : ", but a copy could not be saved next to the results file") + ".";
+  } catch (e) { $("exportExtrasMsg").hidden = false; $("exportExtrasMsg").className = "hint problem"; $("exportExtrasMsg").textContent = e.message; }     // shown on the page: an alert flashed away
   $("exportExtrasBtn").disabled = false;
 };
 $("quitAppBtn").onclick = () => {
@@ -1676,6 +1679,16 @@ $("quitAppBtn").onclick = () => {
 };
 $("stopBtn").onclick = () => api("/api/stop", {}).catch(fail);
 
+/* While a run is going, whatever changes how it works or what it reads is locked. Stop, Save, Skip, Decline and the Tick buttons stay live.
+   Only buttons that were enabled are locked, and only those are freed again, so a button that is off for another reason stays off. */
+const RUN_LOCKED = "#ignoreBtn, #chainBtn, #modeBtn, #folderBtn, #latestBtn, #pickBtn, #runBtn, #extrasBtn, #dryRun, #limit, "
+  + "#appPickBtn, #appFollowBtn, #appCheckLinks, #qaDashBtn, #qaOnlyBtn, #qaSkipBtn, #qaPickBtn, #qaFollowBtn, #qaChainSel, #fixApply";
+function lockWhileRunning(running) {
+  document.querySelectorAll(RUN_LOCKED).forEach(el => {
+    if (running) { if (!el.disabled) { el.disabled = true; el.dataset.runLock = "1"; } }
+    else if (el.dataset.runLock) { delete el.dataset.runLock; el.disabled = false; }
+  });
+}
 async function poll() {
   try {
     const s = await api("/api/status?since=" + since);
@@ -1689,10 +1702,10 @@ async function poll() {
     $("chromeDot").classList.toggle("on", s.chrome);
     $("chromeText").textContent = s.chrome ? "running" : "not running";
     $("chromeSummary").textContent = s.chrome ? "· running" : "· not running";
-    $("runBtn").disabled = s.running; $("extrasBtn").disabled = s.running;
+    lockWhileRunning(s.running);
     for (const id of ["stopBtn", "appStop"]) $(id).disabled = !s.running;
     renderRun(s.state, s.running);
-    $("runState").textContent = $("appRunState").textContent = s.running ? "Running…" : "";
+    $("runState").textContent = $("appRunState").textContent = s.running ? "Running… (settings and file choices are locked until it finishes)" : "";
     if (s.running) $("appRun").disabled = true;
     if ((wasRunning && !s.running) || (s.running && Date.now() - lastCountPoll > 2000)) {   // keep the saved count live during and just after a run
       lastCountPoll = Date.now(); refreshGoQa().catch(() => {}); refreshLimits(wasRunning && !s.running).catch(() => {});
