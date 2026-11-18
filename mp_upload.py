@@ -334,11 +334,19 @@ def emit(info, phase, **extra):
     print("@@STATE " + json.dumps({**info, "phase": phase, **extra}), flush=True)
 
 
+def url_param(url, name):
+    """One value from the issue link's own query (the currencies the issue is prefilled with), or '' when it has none."""
+    from urllib.parse import parse_qs, urlsplit
+    return (parse_qs(urlsplit(url).query).get(name) or [""])[0].upper()
+
+
 READ_BACK_JS = """() => {
   const q = s => document.querySelector(s);
   const chosen = s => { const e = q(s); return e && e.selectedOptions && e.selectedOptions[0] ? e.selectedOptions[0].textContent.trim() : null; };
   const file = s => { const e = q(s), f = e && e.files && e.files[0]; return f ? { name: f.name, size: f.size } : null; };
+  const field = n => { const e = q(`[name="${n}"]`); return e ? (e.tagName === 'SELECT' ? (chosen(`[name="${n}"]`) || e.value) : e.value) : null; };   // null: not on the form
   return { base_rate: q('#id_base_shop_rate').value, channel_rate: q('#id_channel_shop_rate').value,
+           base_currency: field('base_shop_currency'), channel_currency: field('channel_shop_currency'),
            base_cancellation: q('#id_base_cancellation').checked, channel_cancellation: q('#id_channel_cancellation').checked,
            channel: chosen('#id_channel_id'), platform: chosen('#id_channel_platform'),
            base_file: file('#id_base_screenshot'), channel_file: file('#id_channel_screenshot') };
@@ -596,6 +604,7 @@ def main():
                     "subscription_id": subscription_id(row),
                     "platform": args.platform, "problems": problems,
                     "expected": {"base_rate": plan["base_shop_rate"], "channel_rate": plan["channel_shop_rate"],
+                                 "base_currency": url_param(plan["url"], "base_shop_currency"), "channel_currency": url_param(plan["url"], "channel_shop_currency"),
                                  "base_cancellation": plan["base_cancellation"], "channel_cancellation": plan["channel_cancellation"],
                                  "platform": "Mobile App" if app else "Mobile Web"},
                     "shots": {"base": plan["base_screenshot"], "channel": plan["channel_screenshot"]}}

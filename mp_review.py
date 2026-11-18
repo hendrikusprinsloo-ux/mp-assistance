@@ -28,7 +28,7 @@ READ_JS = """() => {
                      return e ? (e.type === 'checkbox' ? e.checked : e.value) : null; };
   const geo = [...document.querySelectorAll('a')].find(a => a.href.includes('/geoinsight'));
   const names = ['subscription_id', 'arrival_date', 'channel_id', 'base_shop_rate', 'channel_shop_rate',
-                 'base_cancellation', 'channel_cancellation'];
+                 'base_shop_currency', 'channel_shop_currency', 'base_cancellation', 'channel_cancellation'];
   return { fields: Object.fromEntries(names.map(n => [n, val(n)])), geoinsight: geo ? geo.href : null };
 }"""
 
@@ -40,12 +40,21 @@ def same_number(a, b):
         return False
 
 
-FIELD_NAMES = ["subscription_id", "arrival_date", "channel_id", "channel_platform", "base_shop_rate", "channel_shop_rate",
-               "base_cancellation", "channel_cancellation"]
+FIELD_NAMES = ["subscription_id", "arrival_date", "channel_id", "base_platform", "channel_platform", "base_shop_rate", "channel_shop_rate",
+               "base_shop_currency", "channel_shop_currency", "base_cancellation", "channel_cancellation"]
 PLATFORM_LABELS = {"0": "Desktop", "1": "Mobile Web", "2": "Mobile App"}   # the form's Channel platform options
 
 
+# the base platform every issue of a chain should have: Parity Manager accepts anything, so the QA is what catches a wrong one
+BASE_PLATFORM_BY_CHAIN = {"Choice": "Desktop", "Best Western": "Desktop", "Wyndham": "Mobile Web"}
+
 NOT_CHECKED = "not checked"   # shown as the expected value when the tool has nothing to compare against; the issue's own value still shows
+
+
+def base_platform_check(entry):
+    """The Base platform row: what the chain's issues should have, compared with the issue. Nothing to compare when the chain is not known."""
+    want = BASE_PLATFORM_BY_CHAIN.get(str(entry.get("client", "")).strip())
+    return ("Base platform", "base_platform", want or NOT_CHECKED, (lambda e, a: e == a) if want else None)
 
 
 def expected_checks(entry):
@@ -54,9 +63,11 @@ def expected_checks(entry):
     A field the done log has no value for (issues pulled from the dashboard, older done logs, a cancellation the tool left as
     pre-filled) still gets its row, with NOT_CHECKED as the expected value and no comparison, so the issue's own value is shown."""
     if str(entry.get("key", "")).startswith("dashboard|"):   # pulled from the dashboard: only the issue's own values, to be compared with the screenshots
-        return [(label, field, NOT_CHECKED, None) for label, field in (
+        return [base_platform_check(entry) if field == "base_platform" else (label, field, NOT_CHECKED, None) for label, field in (
             ("Subscription id", "subscription_id"), ("Arrival date", "arrival_date"), ("Channel", "channel_id"),
-            ("Channel platform", "channel_platform"), ("Base rate", "base_shop_rate"), ("Channel rate", "channel_shop_rate"),
+            ("Base platform", "base_platform"), ("Channel platform", "channel_platform"),
+            ("Base rate", "base_shop_rate"), ("Channel rate", "channel_shop_rate"),
+            ("Base currency", "base_shop_currency"), ("Channel currency", "channel_shop_currency"),
             ("Base cancellation", "base_cancellation"), ("Channel cancellation", "channel_cancellation"))]
 
     def sure(value, known=True):
@@ -69,13 +80,16 @@ def expected_checks(entry):
         ("Subscription id", "subscription_id", entry.get("subscription_id", ""), lambda e, a: str(e) == str(a)),
         ("Arrival date", "arrival_date", m.normalize_date(entry.get("from_date", "")), lambda e, a: e == m.normalize_date(a)),
         ("Channel", "channel_id", entry.get("OTA_name", ""), lambda e, a: str(e).lower() == str(a).lower()),
+        base_platform_check(entry),
         ("Channel platform", "channel_platform", platform, (lambda e, a: e == a) if p_known else None),
     ]
     if entry.get("difference"):        # the dashboard's own figure should equal base rate minus channel rate on the issue
         checks.append(("Difference with base rate", "difference", entry["difference"], same_number))
     checks += [("Base rate", "base_shop_rate", entry["base_rate"] if has_rates else NOT_CHECKED, same_number if has_rates else None),
                ("Channel rate", "channel_shop_rate", entry.get("channel_rate", "") if has_rates else NOT_CHECKED,
-                same_number if has_rates else None)]
+                same_number if has_rates else None),
+               # the currency the rates are in, as the issue holds it: shown for checking against the screenshots, nothing to compare it with
+               ("Base currency", "base_shop_currency", NOT_CHECKED, None), ("Channel currency", "channel_shop_currency", NOT_CHECKED, None)]
     for label, field in (("Base cancellation", "base_cancellation"), ("Channel cancellation", "channel_cancellation")):
         text = entry.get(field, "")
         if text in ("ticked", "not ticked"):
@@ -130,6 +144,9 @@ def parse_issue_html(html):
     reader.feed(html)
     fields = {n: reader.fields.get(n) for n in FIELD_NAMES}
     fields["channel_platform"] = PLATFORM_LABELS.get(fields["channel_platform"], fields["channel_platform"])
+    if fields["base_platform"] is None:                    # shown as plain text on the page rather than as a form field
+        fields["base_platform"] = readonly_value(html, "Base platform")
+    fields["base_platform"] = PLATFORM_LABELS.get(fields["base_platform"], fields["base_platform"])
     fields["subscription_name"] = readonly_value(html, "Subscription name")
     # the rates as saved, converted to the subscription's currency, which is what the dashboard's difference is based on
     base = readonly_value(html, "Base rate") or fields["base_shop_rate"]

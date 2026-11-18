@@ -120,9 +120,10 @@ The app always opens on this tab.
 2. **2. Results CSV:** the newest results file is usually loaded for you (see *Default runs folder* below). Otherwise click **Choose file…** and pick
    the results CSV. The app also remembers the file you last chose, so a page reload does not empty it.
 3. Optional: tick **Dry run (preview only)** to see what would be processed without touching Parity Manager, or set **Limit rows** (left empty, it loads all the remaining rows).
-4. Click **Start**. (To work only on the extra issues, see **Start with extra issues only** below.) The page scrolls down smoothly to the **3. Run** card. For each eligible row the tool fills the Parity Manager form in Chrome and
+4. Click **Start**. (To work only on the extra issues, see **Start with extra issues only** below.) The page scrolls down smoothly to the **3. Run** card, and scrolls there once more when the first issue appears. For each eligible row the tool fills the Parity Manager form in Chrome and
    shows a **card** there with:
-   - the values as the form holds them (rates, cancellations, channel, platform, files attached), each with a ✓ or ✗ against what was meant;
+   - the values as the form holds them (rates, currencies, cancellations, channel, platform, files attached), each with a ✓ or ✗ against what was meant. **Base currency** and **Channel currency** come after the channel rate,
+     with a ✓ when they match the currency in the issue link;
    - both screenshots.
 
    If the results file had a cancellation wrong, click **Untick** or **Tick** beside that row on the card. It changes the form in Chrome straight away.
@@ -212,7 +213,9 @@ The QA tab checks that the values on the issues themselves match the Lighthouse 
    To look at only some issues, click **Only these issues…** and choose a QA file: the tab then lists just the issues in it. Use this to recheck the Problems you exported from the QA Fixes tab.
 3. Step through the issues with **‹** and **›**; the page glides smoothly to the top of each issue's card. For each one:
    - The table lists the issue's own values, read from Parity Manager in the background: subscription id, arrival date, channel, platform,
-     base and channel rate, and both cancellations.
+     base and channel rate, both cancellations, **Base platform**, **Base currency** and **Channel currency**. The currencies (for example USD or CAD) are only shown, to check against the screenshots; they are not compared with anything.
+     **Base platform** is checked by chain, because Parity Manager accepts any value: Choice and Best Western should have **Desktop**, Wyndham should have **Mobile Web**. A wrong value is crossed, for example "✗ should be Desktop", and the message under the table says so.
+     For issues loaded from the dashboard the table has a third column that shows this mark. An issue with no chain recorded is not judged.
    - The Lighthouse **screenshots** (Brand.com and the channel) load beside it. Check the values against them. Click the brand code to copy it.
    - **Open issue + Geoinsight** opens the issue and its Geoinsight page in the tool's Chrome if you want to look closer.
 4. Mark each issue **Looks right** or **Problem**, with an optional note.
@@ -237,9 +240,9 @@ Use the **QA Fixes** tab for issues you marked **Problem**. It changes the real 
 3. Change what is wrong, leaving the rest as it is:
    - **Base shop rate** or **Channel shop rate**: type the right number.
    - **Base cancellation** or **Channel cancellation**: choose **Ticked** or **Not ticked**.
-   - **Base platform** or **Channel platform**: choose Desktop, Mobile Web or Mobile App.
+   - **Base platform** or **Channel platform**: choose Desktop, Mobile Web or Mobile App. The **Now on the issue** column shows the platform the issue really has, and adds a red "✗ should be Desktop" (or Mobile Web) when the base platform is wrong for the chain.
    - **Screenshots**: click **Choose a new image…** under either screenshot to replace it.
-4. **Open brand page**, **Open channel page** and **Open Geoinsight page** open those pages in your everyday Chrome, so you can look closer or take a new screenshot. A note on the fix is optional.
+4. **Open brand page**, **Open channel page** and **Open Geoinsight page** open those pages in your everyday Chrome, so you can look closer or take a new screenshot. A note on the fix is optional. In the header of **2. Fix the issue** (the line with the hotel, channel and issue number), the issue number is an underlined link: click it to open that issue's page in Parity Manager in your everyday Chrome, the same way as the buttons above. Hovering over it shows where it goes.
 5. Click **Apply the changes** (it shows how many changes). The app asks you to confirm, then saves to the real issue. The fixed issue goes back to unchecked on the QA tab and is removed from your QA cache, so it cannot be skipped by mistake.
 6. **Export fixed Problems** saves `qa-problems_<chain>_<date>.csv` with the issues you fixed (tick **include the ones not fixed yet** to put every Problem in it). It is also saved by itself when the last Problem is fixed.
    On the QA tab, load it with **Only these issues…** to check the fixes.
