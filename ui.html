@@ -68,6 +68,7 @@
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--sub); font-size: 12px; font-weight: 600; }
   td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  a.issue-link { color: var(--accent); text-decoration: underline; cursor: pointer; }
   .good { color: var(--ok); } .problem { color: var(--bad); }
   .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
   figure { margin: 0; }
@@ -1266,10 +1267,18 @@ function renderFixList() {
     tr.insertCell().appendChild(b);
   }
 }
+const issuePageUrl = item => /^https:\/\/paritymanager\.mylighthouse\.com\//.test(item.issue_url || "") ? item.issue_url
+  : `https://paritymanager.mylighthouse.com/admin/parity_manager/adminpromotionparityissue/${item.issue_id}/change/`;
 async function fixOpen(item) {
   fixCur = item; fixEdit = {}; fixShots = {}; fixLinks = {}; fixRead = {};
   $("fixEmpty").hidden = true; $("fixCard").hidden = false;
-  $("fixTitle").textContent = `${fixLabel(item)} · issue ${item.issue_id}`;
+  const t = $("fixTitle"), url = issuePageUrl(item);                      // the issue number links to the issue itself, in the everyday Chrome
+  t.textContent = `${fixLabel(item)} · issue `;
+  const link = document.createElement("a");
+  link.textContent = item.issue_id; link.href = url; link.className = "issue-link";
+  link.title = "Open this issue in Parity Manager in your everyday Chrome";
+  link.onclick = ev => { ev.preventDefault(); api("/api/fixes/open", { url }).catch(fail); };
+  t.appendChild(link);
   $("fixProblemNote").textContent = item.note ? `Marked Problem: ${item.note}` : (item.check ? `Marked Problem. Field check: ${item.check}` : "Marked Problem.");
   $("fixStatus").textContent = "Reading the issue…"; $("fixResultMsg").textContent = ""; $("fixApply").disabled = true; $("fixNote").value = "";
   $("fixShotBaseName").textContent = $("fixShotChannelName").textContent = "";
