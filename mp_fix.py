@@ -152,7 +152,7 @@ def main():
             print("RESULT " + json.dumps({"issue_id": args.issue_id, "geoinsight": parsed["geoinsight"], "values": {
                 "base_shop_rate": f.get("base_shop_rate"), "channel_shop_rate": f.get("channel_shop_rate"),
                 "base_cancellation": f.get("base_cancellation"), "channel_cancellation": f.get("channel_cancellation"),
-                "channel_platform": f.get("channel_platform")}}))
+                "base_platform": f.get("base_platform"), "channel_platform": f.get("channel_platform")}}))
             return
         page = ctx.new_page()
         try:
@@ -176,7 +176,7 @@ def main():
             print("RESULT " + json.dumps({"issue_id": args.issue_id, "changed": done, "now": {
                 "base_shop_rate": f.get("base_shop_rate"), "channel_shop_rate": f.get("channel_shop_rate"),
                 "base_cancellation": f.get("base_cancellation"), "channel_cancellation": f.get("channel_cancellation"),
-                "channel_platform": f.get("channel_platform")}}))
+                "base_platform": f.get("base_platform"), "channel_platform": f.get("channel_platform")}}))
         finally:
             try:
                 page.close()

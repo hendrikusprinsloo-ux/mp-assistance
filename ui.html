@@ -704,21 +704,24 @@ function renderTable() {
   const rows = res ? res.checks : item.expected.map(e => ({ field: e.field, expected: e.expected, pending: true }));
   const fromDash = item.key.startsWith("dashboard|");        // nothing was entered for these: just the issue's own values, to compare with the screenshots
   const head = table.createTHead().insertRow();
-  for (const h of fromDash ? ["Field", "On the issue"] : ["Field", "Expected (CSV)", "On the issue", ""]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
+  for (const h of fromDash ? ["Field", "On the issue", ""] : ["Field", "Expected (CSV)", "On the issue", ""]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
   const body = table.createTBody();
   for (const c of rows) {
     const tr = body.insertRow();
     tr.insertCell().textContent = c.field;
     if (!fromDash) tr.insertCell().textContent = fmt(c.expected);
     tr.insertCell().textContent = c.pending ? (checking.has(item.key) ? "checking…" : "–") : fmt(c.actual);
-    if (fromDash) continue;
     const td = tr.insertCell();
-    td.textContent = c.pending || c.ok === null ? "" : c.ok ? "✓" : "✗"; td.className = c.pending || c.ok === null ? "" : c.ok ? "good" : "problem";
+    td.textContent = c.pending || c.ok === null ? "" : c.ok ? "✓" : (fromDash ? `✗ should be ${c.expected}` : "✗"); td.className = c.pending || c.ok === null ? "" : c.ok ? "good" : "problem";
   }
 }
 
 function showResultMsg(res) {
-  if (revItems[revIdx] && revItems[revIdx].key.startsWith("dashboard|")) { $("revMsg").textContent = "Compare the values with the screenshots."; $("revMsg").className = "hint"; return; }
+  if (revItems[revIdx] && revItems[revIdx].key.startsWith("dashboard|")) {
+    const wrong = (res.checks || []).find(c => c.ok === false);          // only the base platform is judged on these: it is set by chain
+    $("revMsg").textContent = wrong ? `${wrong.field} is ${fmt(wrong.actual)} but should be ${wrong.expected}. Compare the other values with the screenshots.` : "Compare the values with the screenshots.";
+    $("revMsg").className = "hint" + (wrong ? " problem" : ""); return;
+  }
   $("revMsg").textContent = res.all_ok ? "Fields match the CSV." : "Some fields differ from the CSV.";
   $("revMsg").className = "hint " + (res.all_ok ? "good" : "problem");
 }
@@ -1295,6 +1298,8 @@ async function loadFixShots(item) {
   }
   $("fixShotsMsg").textContent = "";
 }
+// the base platform each chain's issues should have (Parity Manager accepts any, so this is only a hint beside the value)
+const BASE_PLATFORM_BY_CHAIN = { "Choice": "Desktop", "Best Western": "Desktop", "Wyndham": "Mobile Web" };
 function renderFixFields() {
   const t = $("fixFields"); t.textContent = "";
   const head = t.createTHead().insertRow();
@@ -1305,7 +1310,10 @@ function renderFixFields() {
   for (const [label, field, kind] of rows) {
     const tr = body.insertRow(); tr.insertCell().textContent = label;
     const now = fixOrig[field];
-    tr.insertCell().textContent = now === undefined || now === null ? "(not shown on the issue)" : kind === "tick" ? (now ? "ticked" : "not ticked") : String(now);
+    const want = field === "base_platform" ? BASE_PLATFORM_BY_CHAIN[(fixCur && fixCur.client) || qaChainNow()] : "";
+    const nowCell = tr.insertCell();
+    nowCell.textContent = now === undefined || now === null ? "(not shown on the issue)" : kind === "tick" ? (now ? "ticked" : "not ticked") : String(now);
+    if (want && now !== want) { nowCell.textContent += `  ✗ should be ${want}`; nowCell.className = "problem"; }
     const cell = tr.insertCell(); let box;
     if (kind === "number") { box = document.createElement("input"); box.type = "text"; box.placeholder = "leave as is"; box.value = fixEdit[field] ?? ""; }
     else { box = document.createElement("select");
@@ -1539,6 +1547,8 @@ function runRows(state) {                      // [label, what the form holds, w
   const flag = (a, b) => b === null ? null : a === b;
   return [["Base rate", v.base_rate, rate(v.base_rate, e.base_rate)],
           ["Channel rate", v.channel_rate, rate(v.channel_rate, e.channel_rate)],
+          ["Base currency", v.base_currency, v.base_currency == null || !e.base_currency ? null : v.base_currency.toUpperCase() === e.base_currency],
+          ["Channel currency", v.channel_currency, v.channel_currency == null || !e.channel_currency ? null : v.channel_currency.toUpperCase() === e.channel_currency],
           ["Base cancellation", tick(v.base_cancellation), flag(v.base_cancellation, e.base_cancellation)],
           ["Channel cancellation", tick(v.channel_cancellation), flag(v.channel_cancellation, e.channel_cancellation)],
           ["Channel", v.channel, null], ["Channel platform", v.platform, v.platform === e.platform],
@@ -1550,7 +1560,9 @@ function renderRun(state, running) {
   for (const p of ["u", "a"]) {
     const mine = !state || (p === "a") === (state.platform === "app");     // a run belongs to the tab it was started from
     const show = running && state && mine;
+    const wasHidden = $(p + "Card").hidden;
     $(p + "Card").hidden = !show; $(p + "Idle").hidden = !!show;
+    if (show && wasHidden) scrollToRunAgain(p);
     $(p + "Idle").textContent = running ? (state && !mine ? (p === "a" ? "A Mobile Web run is in progress: see the Upload tab." : "A Mobile App run is in progress: see the Mobile App tab.") : "Starting…")
                                         : "Each issue appears here to check once its form is filled.";
     if (!show) { runSeen[p] = runSeen[p + "i"] = ""; continue; }
@@ -1568,7 +1580,7 @@ function renderRun(state, running) {
         const body = table.createTBody();
         for (const [label, value, ok] of rows) {
           const tr = body.insertRow();
-          tr.insertCell().textContent = label; tr.insertCell().textContent = value === null ? "–" : value;
+          tr.insertCell().textContent = label; tr.insertCell().textContent = value == null ? "–" : value;
           const mark = tr.insertCell(); mark.textContent = ok === null ? "" : ok ? "✓" : "✗"; mark.className = ok === null ? "" : ok ? "good" : "problem";
           const field = label === "Base cancellation" ? "base_cancellation" : label === "Channel cancellation" ? "channel_cancellation" : "";
           if (field && (state.phase === "ready" || state.phase === "error")) {      // change it by hand if the results file had it wrong
@@ -1629,11 +1641,24 @@ initFolds();
 
 // Once a run has started, glide down to its card so the form values and screenshots fill the window
 // (not when the click was refused, and with no animation for people who have asked their system for reduced motion)
+// The click scrolls at once, while the card still says "Starting…" and the page is too short to reach the top of the Run section, so it ends
+// high. The scroll is therefore done again the first time the issue card appears (once the page has grown), and only for a run just started.
+let runScrollPending = { id: "", at: 0 };
 function scrollToRun(id) {
   const el = $(id); if (!el || el.closest("[hidden]")) return;
   unfold(id);                                       // a folded Run card is opened first, so there is something to show
+  runScrollPending = { id, at: Date.now() };
   const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+}
+function scrollToRunAgain(p) {
+  const { id, at } = runScrollPending;
+  if (id !== p + "RunSection") return;
+  runScrollPending = { id: "", at: 0 };
+  if (Date.now() - at > 60000) return;              // a card that took this long is not "the run just started"
+  const el = $(id); if (!el || el.closest("[hidden]")) return;
+  const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  requestAnimationFrame(() => el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" }));
 }
 // Smooth glide to any element, used by the QA and Mobile App tabs. Folded sections are opened first; reduced motion means an instant jump.
 function glideTo(id, block = "start") {
