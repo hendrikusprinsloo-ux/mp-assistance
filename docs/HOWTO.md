@@ -242,7 +242,7 @@ Use the **QA Fixes** tab for issues you marked **Problem**. It changes the real 
    - **Base cancellation** or **Channel cancellation**: choose **Ticked** or **Not ticked**.
    - **Base platform** or **Channel platform**: choose Desktop, Mobile Web or Mobile App. The **Now on the issue** column shows the platform the issue really has, and adds a red "✗ should be Desktop" (or Mobile Web) when the base platform is wrong for the chain.
    - **Screenshots**: click **Choose a new image…** under either screenshot to replace it.
-4. **Open brand page**, **Open channel page** and **Open Geoinsight page** open those pages in your everyday Chrome, so you can look closer or take a new screenshot. A note on the fix is optional.
+4. **Open brand page**, **Open channel page** and **Open Geoinsight page** open those pages in your everyday Chrome, so you can look closer or take a new screenshot. A note on the fix is optional. In the header of **2. Fix the issue** (the line with the hotel, channel and issue number), the issue number is an underlined link: click it to open that issue's page in Parity Manager in your everyday Chrome, the same way as the buttons above. Hovering over it shows where it goes.
 5. Click **Apply the changes** (it shows how many changes). The app asks you to confirm, then saves to the real issue. The fixed issue goes back to unchecked on the QA tab and is removed from your QA cache, so it cannot be skipped by mistake.
 6. **Export fixed Problems** saves `qa-problems_<chain>_<date>.csv` with the issues you fixed (tick **include the ones not fixed yet** to put every Problem in it). It is also saved by itself when the last Problem is fixed.
    On the QA tab, load it with **Only these issues…** to check the fixes.
