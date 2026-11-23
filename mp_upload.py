@@ -38,6 +38,9 @@ LOG_FIELDS = ["timestamp", "key", "OTA_name", "brand_code", "from_date", "subscr
 # the run; platform says whether it was a web or a Mobile App issue (the client column holds the chain).
 APP_CHANNELS = ("bookingdotcom", "expedia")   # the only channels a Mobile App issue can be raised for
 PLATFORM_APP = "2"                            # the form's Channel platform value for Mobile App (Mobile Web is 1)
+PLATFORM_VALUES = {"Desktop": "0", "Mobile Web": "1", "Mobile App": "2"}     # what the platform dropdowns offer, by the name shown
+# the base platform every issue of a chain should have: Parity Manager accepts anything, so the run sets it and the QA checks it
+BASE_PLATFORM_BY_CHAIN = {"Choice": "Desktop", "Best Western": "Desktop", "Wyndham": "Mobile Web"}
 
 # Every saved issue is also noted in a ledger kept with the app, so daily limits and "already uploaded" can be worked out
 # across the day's several results files.
@@ -304,9 +307,20 @@ def set_toggle(page, field, want):
         raise RuntimeError(f"The form would not set {field.replace('_', ' ')} to {'ticked' if want else 'not ticked'}")
 
 
+def set_base_platform(page, label):
+    """Choose the base platform on the form. Returns False when the form has no such dropdown (nothing is guessed at then)."""
+    box = page.locator("select#id_base_platform")
+    if label not in PLATFORM_VALUES or box.count() == 0:
+        return False
+    box.select_option(PLATFORM_VALUES[label])
+    return True
+
+
 def fill_form(page, plan):
     page.goto(plan["url"])
     page.wait_for_selector(FORM_READY, timeout=0)  # blocks until you are logged in and the form shows
+    if plan.get("base_platform"):
+        set_base_platform(page, plan["base_platform"])      # the issue link does not always pre-fill the right one
     if plan.get("channel_platform"):
         page.select_option("#id_channel_platform", plan["channel_platform"])
     page.fill("#id_base_shop_rate", plan["base_shop_rate"])
@@ -348,7 +362,7 @@ READ_BACK_JS = """() => {
   return { base_rate: q('#id_base_shop_rate').value, channel_rate: q('#id_channel_shop_rate').value,
            base_currency: field('base_shop_currency'), channel_currency: field('channel_shop_currency'),
            base_cancellation: q('#id_base_cancellation').checked, channel_cancellation: q('#id_channel_cancellation').checked,
-           channel: chosen('#id_channel_id'), platform: chosen('#id_channel_platform'),
+           channel: chosen('#id_channel_id'), platform: chosen('#id_channel_platform'), base_platform: chosen('select#id_base_platform'),
            base_file: file('#id_base_screenshot'), channel_file: file('#id_channel_screenshot') };
 }"""
 
@@ -475,6 +489,19 @@ def wait_for_review(page, info, plan):
             except Exception as e:
                 print(f"  could not change {command}: {str(e).splitlines()[0][:120]}")
                 emit(info, phase, values=read_back(page), message=f"Could not change that toggle: {str(e).splitlines()[0][:100]}")
+        elif command.startswith("p:"):      # p:base_platform:<Desktop|Mobile Web|Mobile App>: the person changed the base platform on the card
+            try:
+                _, field, value = command.split(":", 2)
+                if field == "base_platform" and value in PLATFORM_VALUES:
+                    if not set_base_platform(page, value):
+                        raise RuntimeError("the form has no Base platform dropdown")
+                    plan["base_platform"] = value
+                    overrides.add(field)
+                    shown = read_back(page)
+                    emit(info, phase, values=shown, message=message)
+            except Exception as e:
+                print(f"  could not change {command}: {str(e).splitlines()[0][:120]}")
+                emit(info, phase, values=read_back(page), message=f"Could not change the base platform: {str(e).splitlines()[0][:100]}")
         elif command.startswith("d:"):      # declined, with the person's note
             return ("declined", command[2:].strip())
         else:                       # "s", or just Enter, skips this issue
@@ -600,12 +627,14 @@ def main():
             n = shown
             print(f"\n[{n}/{len(todo)}] row {row_no}  {row['hotel_name']}  [{row['OTA_name']}]" + ("  (Mobile App)" if app else ""))
             issue_id = ""
+            plan["base_platform"] = BASE_PLATFORM_BY_CHAIN.get(args.client.strip())     # None for a chain with no rule: left as pre-filled
             info = {"n": n, "total": max(len(todo) - sum(channels.left_out.values()), n), "hotel": row["hotel_name"], "channel": row["OTA_name"], "brand_code": row["brand_code"],
                     "subscription_id": subscription_id(row),
                     "platform": args.platform, "problems": problems,
                     "expected": {"base_rate": plan["base_shop_rate"], "channel_rate": plan["channel_shop_rate"],
                                  "base_currency": url_param(plan["url"], "base_shop_currency"), "channel_currency": url_param(plan["url"], "channel_shop_currency"),
                                  "base_cancellation": plan["base_cancellation"], "channel_cancellation": plan["channel_cancellation"],
+                                 "base_platform": plan["base_platform"],
                                  "platform": "Mobile App" if app else "Mobile Web"},
                     "shots": {"base": plan["base_screenshot"], "channel": plan["channel_screenshot"]}}
             emit(info, "filling")

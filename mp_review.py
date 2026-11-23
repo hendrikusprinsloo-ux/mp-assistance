@@ -46,7 +46,7 @@ PLATFORM_LABELS = {"0": "Desktop", "1": "Mobile Web", "2": "Mobile App"}   # the
 
 
 # the base platform every issue of a chain should have: Parity Manager accepts anything, so the QA is what catches a wrong one
-BASE_PLATFORM_BY_CHAIN = {"Choice": "Desktop", "Best Western": "Desktop", "Wyndham": "Mobile Web"}
+BASE_PLATFORM_BY_CHAIN = m.BASE_PLATFORM_BY_CHAIN
 
 NOT_CHECKED = "not checked"   # shown as the expected value when the tool has nothing to compare against; the issue's own value still shows
 
