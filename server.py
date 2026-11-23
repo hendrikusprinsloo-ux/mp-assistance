@@ -1803,7 +1803,7 @@ def open_tool_windows():
 
 
 def send_to_run(text):
-    if not (text in ("save", "s", "q") or text.startswith("d:") or text.startswith("c:")):   # only what the upload tool understands: save, skip, decline (with a note), stop
+    if not (text in ("save", "s", "q") or text.startswith("d:") or text.startswith("c:") or text.startswith("p:")):   # only what the upload tool understands: save, skip, decline (with a note), stop
         text = None
     if text is None:
         return {"error": "Unknown command"}, 400

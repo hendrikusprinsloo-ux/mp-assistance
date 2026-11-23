@@ -124,6 +124,8 @@ The app always opens on this tab.
    shows a **card** there with:
    - the values as the form holds them (rates, currencies, cancellations, channel, platform, files attached), each with a ✓ or ✗ against what was meant. **Base currency** and **Channel currency** come after the channel rate,
      with a ✓ when they match the currency in the issue link;
+   - **Base platform**: when the tool fills the form it sets this by chain (Choice and Best Western: Desktop, Wyndham: Mobile Web); a chain with no rule is left as the issue link pre-filled it. The row shows what the form holds, with a ✓ or ✗ against the chain's value.
+     While the issue is ready, the row has a list (Desktop, Mobile Web, Mobile App) to change it on the form yourself. A change is noted in the done file as "Changed by hand: base platform";
    - both screenshots.
 
    If the results file had a cancellation wrong, click **Untick** or **Tick** beside that row on the card. It changes the form in Chrome straight away.

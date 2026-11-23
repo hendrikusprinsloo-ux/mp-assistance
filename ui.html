@@ -1560,6 +1560,7 @@ function runRows(state) {                      // [label, what the form holds, w
           ["Channel currency", v.channel_currency, v.channel_currency == null || !e.channel_currency ? null : v.channel_currency.toUpperCase() === e.channel_currency],
           ["Base cancellation", tick(v.base_cancellation), flag(v.base_cancellation, e.base_cancellation)],
           ["Channel cancellation", tick(v.channel_cancellation), flag(v.channel_cancellation, e.channel_cancellation)],
+          ["Base platform", v.base_platform, v.base_platform == null || !e.base_platform ? null : v.base_platform === e.base_platform],
           ["Channel", v.channel, null], ["Channel platform", v.platform, v.platform === e.platform],
           ["Base screenshot", fileText(v.base_file), !!v.base_file], ["Channel screenshot", fileText(v.channel_file), !!v.channel_file]];
 }
@@ -1599,6 +1600,13 @@ function renderRun(state, running) {
             flip.style.marginLeft = "10px"; flip.style.padding = "2px 10px";
             flip.onclick = () => { flip.disabled = true; api("/api/send", { text: `c:${field}:${now ? 0 : 1}` }).catch(e => { fail(e); flip.disabled = false; }); };
             mark.appendChild(flip);
+          }
+          if (label === "Base platform" && value != null && (state.phase === "ready" || state.phase === "error")) {   // Parity Manager accepts any, so it can be changed here
+            const pick = document.createElement("select");
+            for (const o of ["Desktop", "Mobile Web", "Mobile App"]) { const opt = document.createElement("option"); opt.textContent = o; opt.selected = o === value; pick.appendChild(opt); }
+            pick.title = "Set the base platform on the form yourself if it is wrong"; Object.assign(pick.style, { width: "auto", padding: "2px 8px", marginLeft: "10px", fontSize: "13px", verticalAlign: "middle" });   // small and beside the tick, like the Tick button
+            pick.onchange = () => { pick.disabled = true; api("/api/send", { text: `p:base_platform:${pick.value}` }).catch(e => { fail(e); pick.disabled = false; }); };
+            mark.appendChild(pick);
           }
         }
       }
